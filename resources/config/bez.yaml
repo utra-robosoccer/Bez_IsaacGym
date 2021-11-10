@@ -1,0 +1,81 @@
+# if given will override the device setting in gym. 
+env:
+  numEnvs: 4000
+  envSpacing: 4.0 # [m]
+
+  plane:
+    staticFriction: 0.9  # [-]
+    dynamicFriction: 0.9  # [-]
+    restitution: 0.        # [-]
+
+  baseInitState:
+    pos: [ 0.0 0.0 0.4 ] # xyz [m]
+    rot: [ 0.0 0.0 0.0 1.0 ] # xyzw [quat]
+    vLinear: [ 0.0 0.0 0.0 ]  # xyz [m/s]
+    vAngular: [ 0.0 0.0 0.0 ]  # xyz [rad/s]
+
+  control:
+    # PD Drive parameters:
+    stiffness: 10 # [N*m/rad]
+    damping: 0    # [N*m*s/rad]
+    actionScale: 0.5 # ?
+
+  defaultJointAngles: # = target angles when action = 0.0
+
+    right_leg_motor_0: 0.0 # [rad]
+    right_leg_motor_1 : 0.0 # [rad]
+    right_leg_motor_2: 0.0 # [rad]
+    right_leg_motor_3: 0.0 # [rad]
+    right_leg_motor_4: 1.571 # [rad]
+    right_leg_motor_5: 0.0 # [rad]
+    left_leg_motor_0: 0.0 # [rad]
+    left_leg_motor_1: 0.7 # [rad]
+    left_leg_motor_2: 0.0 # [rad]
+    left_leg_motor_3: 0.0 # [rad]
+    left_leg_motor_4: 1.571 # [rad]
+    left_leg_motor_5: 0.0 # [rad]
+    right_arm_motor_0: 3.2 # [rad]
+    right_arm_motor_1: 0.0 # [rad]
+    left_arm_motor_0: 3.2 # [rad]
+    left_arm_motor_1: 0.0 # [rad]
+    head_motor_0: 0.0 # [rad]
+    head_motor_1: 0.0 # [rad]
+
+  urdfAsset:
+    collapseFixedJoints: True
+    fixBaseLink: False
+    replace_cylinder_with_capsule: True
+    flip_visual_attachments: True
+    density: 0.001
+    angular_damping: 0.0
+    linear_damping: 0.0
+    thickness: 0.01
+    disable_gravity: False
+    armature: 0.0
+    defaultDofDriveMode: 1 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
+
+  # viewer cam:
+  viewer:
+    refEnv: 0
+    pos: [ 0, 0, 4 ]  # [m]
+    lookat: [ 1., 1, 3.3 ]  # [m]
+
+  asset:
+    assetRoot: ../../resources/assets
+    assetFileName: bez/model/soccerbot_box.urdf
+sim:
+  substeps: 2
+  gravity: [0., 0. ,-9.81]  # [m/s^2]
+  up_axis: 1  # 0 is y, 1 is z
+
+  physx:
+    num_threads: 4
+    solver_type: 1  # 0: pgs, 1: tgs
+    num_position_iterations: 4
+    num_velocity_iterations: 1
+    contact_offset: 0.02
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    max_depenetration_velocity: 5.0
+task:
+  randomize: False
