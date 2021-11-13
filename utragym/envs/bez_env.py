@@ -2,8 +2,10 @@ import numpy as np
 import os
 import time
 
-from rlgpu.utils.torch_jit_utils import *
-from rlgpu.tasks.base.base_task import BaseTask
+from external.isaacgym.python.isaacgym.torch_utils import torch_rand_float, quat_rotate_inverse, quat_rotate, to_torch, \
+    get_axis_params
+from utragym.utils.torch_jit_utils import *
+from utragym.envs.base.base_task import BaseTask
 from isaacgym import gymtorch
 from isaacgym import gymapi
 
@@ -12,10 +14,10 @@ from torch.tensor import Tensor
 from typing import Tuple, Dict
 
 
-class bez(BaseTask):
+class BezEnv(BaseTask):
 
     def __init__(self, cfg, sim_params, physics_engine, device_type, device_id, headless):
-
+        self.randomize = False
         # Setup
         self.cfg = cfg
         self.sim_params = sim_params
@@ -96,16 +98,16 @@ class bez(BaseTask):
             self.default_dof_pos[:, i] = angle
 
         # initialize some data used later on
-        # self.extras = {}
-        # self.initial_root_states = self.root_states.clone()
-        # self.initial_root_states[:] = to_torch(self.base_init_state, device=self.device, requires_grad=False)
-        # self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
-        #     (self.num_envs, 1))
+        self.extras = {}
+        self.initial_root_states = self.root_states.clone()
+        self.initial_root_states[:] = to_torch(self.base_init_state, device=self.device, requires_grad=False)
+        self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
+            (self.num_envs, 1))
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device,
                                    requires_grad=False)
-        # self.time_out_buf = torch.zeros_like(self.reset_buf)
-        #
-        # self.reset(torch.arange(self.num_envs, device=self.device))
+        self.time_out_buf = torch.zeros_like(self.reset_buf)
+
+        self.reset(torch.arange(self.num_envs, device=self.device))
 
     def create_sim(self):
         self.up_axis_idx = self.set_sim_params_up_axis(self.sim_params, 'z')
@@ -198,37 +200,27 @@ class bez(BaseTask):
         self.rew_buf[:], self.reset_buf[:] = compute_anymal_reward(
             # tensors
             self.root_states,
-            self.commands,
-            self.torques,
-            self.contact_forces,
-            self.knee_indices,
+
             self.progress_buf,
             # Dict
-            self.rew_scales,
+
             # other
-            self.base_index,
-            self.max_episode_length,
+            self.base_index
+
         )
 
     def compute_observations(self):
         self.gym.refresh_dof_state_tensor(self.sim)  # done in step
         self.gym.refresh_actor_root_state_tensor(self.sim)
-        self.gym.refresh_net_contact_force_tensor(self.sim)
-        self.gym.refresh_dof_force_tensor(self.sim)
+
 
         self.obs_buf[:] = compute_anymal_observations(  # tensors
             self.root_states,
-            self.commands,
             self.dof_pos,
             self.default_dof_pos,
             self.dof_vel,
-            self.gravity_vec,
-            self.actions,
-            # scales
-            self.lin_vel_scale,
-            self.ang_vel_scale,
-            self.dof_pos_scale,
-            self.dof_vel_scale
+            self.actions
+
         )
 
     def reset(self, env_ids):
@@ -252,12 +244,7 @@ class bez(BaseTask):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-        self.commands_x[env_ids] = torch_rand_float(self.command_x_range[0], self.command_x_range[1],
-                                                    (len(env_ids), 1), device=self.device).squeeze()
-        self.commands_y[env_ids] = torch_rand_float(self.command_y_range[0], self.command_y_range[1],
-                                                    (len(env_ids), 1), device=self.device).squeeze()
-        self.commands_yaw[env_ids] = torch_rand_float(self.command_yaw_range[0], self.command_yaw_range[1],
-                                                      (len(env_ids), 1), device=self.device).squeeze()
+
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
@@ -270,16 +257,12 @@ class bez(BaseTask):
 def compute_anymal_reward(
     # tensors
     root_states: Tensor,
-    commands: Tensor,
-    torques: Tensor,
-    contact_forces: Tensor,
-    knee_indices: Tensor,
-    episode_lengths: Tensor,
+
     # Dict
-    rew_scales: Dict[str, float],
+
     # other
     base_index: int,
-    max_episode_length: int,
+
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
 
     # prepare quantities (TODO: return from obs ?)
@@ -288,15 +271,12 @@ def compute_anymal_reward(
     base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13])
 
     # velocity tracking reward
-    lin_vel_error = torch.sum(torch.square(commands[:, :2] - base_lin_vel[:, :2]), dim=1)
-    ang_vel_error = torch.square(commands[:, 2] - base_ang_vel[:, 2])
-    rew_lin_vel_xy = torch.exp(-lin_vel_error/0.25) * rew_scales["lin_vel_xy"]
-    rew_ang_vel_z = torch.exp(-ang_vel_error/0.25) * rew_scales["ang_vel_z"]
+
 
     # torque penalty
-    rew_torque = torch.sum(torch.square(torques), dim=1) * rew_scales["torque"]
 
-    total_reward = rew_lin_vel_xy + rew_ang_vel_z + rew_torque
+
+    total_reward = 0
     total_reward = torch.clip(total_reward, 0., None)
     # reset agents
     reset = torch.norm(contact_forces[:, base_index, :], dim=1) > 1.

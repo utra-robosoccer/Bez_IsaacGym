@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 4000
+  numEnvs: 1
   envSpacing: 4.0 # [m]
 
   plane:
@@ -9,10 +9,10 @@ env:
     restitution: 0.        # [-]
 
   baseInitState:
-    pos: [ 0.0 0.0 0.4 ] # xyz [m]
-    rot: [ 0.0 0.0 0.0 1.0 ] # xyzw [quat]
-    vLinear: [ 0.0 0.0 0.0 ]  # xyz [m/s]
-    vAngular: [ 0.0 0.0 0.0 ]  # xyz [rad/s]
+    pos: [ 0.0, 0.0, 0.4 ] # xyz [m]
+    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
+    vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
+    vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   control:
     # PD Drive parameters:
@@ -61,7 +61,7 @@ env:
     lookat: [ 1., 1, 3.3 ]  # [m]
 
   asset:
-    assetRoot: ../../resources/assets
+    assetRoot: resources/assets
     assetFileName: bez/model/soccerbot_box.urdf
 sim:
   substeps: 2
