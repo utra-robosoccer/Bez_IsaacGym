@@ -12,7 +12,7 @@ from isaacgym.torch_utils import *
 
 @torch.jit.script
 def compute_heading_and_up(
-    torso_rotation, inv_start_rot, to_target, vec0, vec1, up_idx
+        torso_rotation, inv_start_rot, to_target, vec0, vec1, up_idx
 ):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
     num_envs = torso_rotation.shape[0]
@@ -48,3 +48,21 @@ def quat_axis(q, axis=0):
     basis_vec = torch.zeros(q.shape[0], 3, device=q.device)
     basis_vec[:, axis] = 1
     return quat_rotate(q, basis_vec)
+
+
+@torch.jit.script
+def saturate(x: torch.Tensor, lower: torch.Tensor, upper: torch.Tensor) -> torch.Tensor:
+    """
+    Clamps a given input tensor to (lower, upper).
+
+    @note It uses pytorch broadcasting functionality to deal with batched input.
+
+    Args:
+        x: Input tensor of shape (N, dims).
+        lower: The minimum value of the tensor. Shape (dims,)
+        upper: The maximum value of the tensor. Shape (dims,)
+
+    Returns:
+        Clamped transform of the tensor. Shape (N, dims)
+    """
+    return torch.max(torch.min(x, upper), lower)

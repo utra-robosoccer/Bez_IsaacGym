@@ -19,7 +19,7 @@ import torch
 
 
 # Base class for RL tasks
-class BaseTask():
+class BezEnv():
 
     def __init__(self, cfg, enable_camera_sensors=False):
         self.gym = gymapi.acquire_gym()
@@ -123,7 +123,7 @@ class BaseTask():
 
         return sim
 
-    def step(self, actions):
+    def step(self, actions, test):
         if self.dr_randomizations.get('actions', None):
             actions = self.dr_randomizations['actions']['noise_lambda'](actions)
 
@@ -140,7 +140,7 @@ class BaseTask():
             self.gym.fetch_results(self.sim, True)
 
         # compute observations, rewards, resets, ...
-        self.post_physics_step()
+        self.post_physics_step(test)
 
         if self.dr_randomizations.get('observations', None):
             self.obs_buf = self.dr_randomizations['observations']['noise_lambda'](self.obs_buf)
@@ -409,7 +409,7 @@ class BaseTask():
     def pre_physics_step(self, actions):
         raise NotImplementedError
 
-    def post_physics_step(self):
+    def post_physics_step(self, test):
         raise NotImplementedError
 
 

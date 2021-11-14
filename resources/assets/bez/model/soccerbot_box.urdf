@@ -50,7 +50,7 @@
   </link>
   <link name="/left_bicep">
     <inertial>
-      <mass value="0.213e-3"/>
+      <mass value="0.000213"/>
       <origin rpy="0  0  0" xyz="0.000 0.02579 -0.04955"/>
       <inertia ixx="2.824e-4" ixy="0.000" ixz="0.0" iyy="2.744e-4" iyz="1.165e-05" izz="2.433e-5"/>
     </inertial>

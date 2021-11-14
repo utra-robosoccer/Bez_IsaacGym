@@ -2,9 +2,8 @@ import numpy as np
 import os
 import time
 
-
 from utragym.utils.torch_jit_utils import *
-from utragym.envs.base.base_task import BaseTask
+from utragym.envs.base.bez_env import BezEnv
 from isaacgym import gymtorch
 from isaacgym import gymapi
 
@@ -13,7 +12,7 @@ from torch.tensor import Tensor
 from typing import Tuple, Dict
 
 
-class BezEnv(BaseTask):
+class KickEnv(BezEnv):
 
     def __init__(self, cfg, sim_params, physics_engine, device_type, device_id, headless):
         self.randomize = False
@@ -36,7 +35,7 @@ class BezEnv(BaseTask):
         self.base_init_state = state
 
         # default joint positions
-        self.named_default_joint_angles = self.cfg["env"]["defaultJointAngles"]
+        self.named_default_joint_angles = self.cfg["env"]["defaultJointAngles"] # defaultJointAngles  readyJointAngles
 
         # other
         self.dt = sim_params.dt
@@ -82,9 +81,10 @@ class BezEnv(BaseTask):
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
         self.root_pos = self.root_states.view(self.num_envs, 13)[..., 0:3]
         self.root_orient = self.root_states.view(self.num_envs, 13)[..., 3:7]
-        self.imu_lin = self.rigid_body.view(self.num_envs, self.gym.get_sim_rigid_body_count(self.sim), 13)[..., 1,
+        num_rigid_bodies = int(self.gym.get_sim_rigid_body_count(self.sim) / self.num_envs)
+        self.imu_lin = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 1,
                        7:10]
-        self.imu_ang = self.rigid_body.view(self.num_envs, self.gym.get_sim_rigid_body_count(self.sim), 13)[..., 1,
+        self.imu_ang = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 1,
                        10:13]
 
         self.default_dof_pos = torch.zeros_like(self.dof_pos, dtype=torch.float, device=self.device,
@@ -155,11 +155,21 @@ class BezEnv(BaseTask):
         self.dof_names = self.gym.get_asset_dof_names(bez_asset)
         self.base_index = 0
 
-        dof_props = self.gym.get_asset_dof_properties(bez_asset)
+        actuator_props = self.gym.get_asset_dof_properties(bez_asset)
+
+        motor_efforts = [prop['effort'] for prop in actuator_props]
+
+        self.max_motor_effort = to_torch(motor_efforts, device=self.device)
+        self.min_motor_effort = -1*to_torch(motor_efforts, device=self.device)
+
+        self.num_bodies = self.gym.get_asset_rigid_body_count(bez_asset)
+        self.num_dof = self.gym.get_asset_dof_count(bez_asset)
+        self.num_joints = self.gym.get_asset_joint_count(bez_asset)
+
         for i in range(self.num_dof):
-            dof_props['driveMode'][i] = gymapi.DOF_MODE_POS
-            dof_props['stiffness'][i] = self.Kp
-            dof_props['damping'][i] = self.Kd
+            actuator_props['driveMode'][i] = self.cfg["env"]["urdfAsset"]["defaultDofDriveMode"]
+            actuator_props['stiffness'][i] = self.Kp
+            actuator_props['damping'][i] = self.Kd
 
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
@@ -169,11 +179,26 @@ class BezEnv(BaseTask):
         for i in range(self.num_envs):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
-            bez_handle = self.gym.create_actor(env_ptr, bez_asset, start_pose, "bez", i, 1, 0)  # 1 for self collision
-            self.gym.set_actor_dof_properties(env_ptr, bez_handle, dof_props)
+            bez_handle = self.gym.create_actor(env_ptr, bez_asset, start_pose, "bez", i, 1, 1)  # 0 for no self collision
+            self.gym.set_actor_dof_properties(env_ptr, bez_handle, actuator_props)
             self.gym.enable_actor_dof_force_sensors(env_ptr, bez_handle)
             self.envs.append(env_ptr)
             self.bez_handles.append(bez_handle)
+
+        self.dof_limits_lower = []
+        self.dof_limits_upper = []
+
+        dof_prop = self.gym.get_actor_dof_properties(env_ptr, bez_handle)
+        for j in range(self.num_dof):
+            if dof_prop['lower'][j] > dof_prop['upper'][j]:
+                self.dof_limits_lower.append(dof_prop['upper'][j])
+                self.dof_limits_upper.append(dof_prop['lower'][j])
+            else:
+                self.dof_limits_lower.append(dof_prop['lower'][j])
+                self.dof_limits_upper.append(dof_prop['upper'][j])
+
+        self.dof_limits_lower = to_torch(self.dof_limits_lower, device=self.device)
+        self.dof_limits_upper = to_torch(self.dof_limits_upper, device=self.device)
 
         self.base_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.bez_handles[0], "base")
 
@@ -181,16 +206,35 @@ class BezEnv(BaseTask):
         # implement pre-physics simulation code here
         #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
-        targets =  self.default_dof_pos
+        # print('here')
+        # print(self.actions)
+        # print(self.dof_pos)
+        # print(self.actions-self.dof_pos)
+        # computed_torque = self.Kp*(self.actions-self.dof_pos)
+        # computed_torque -= self.Kd*(self.actions-self.dof_vel)
+        # applied_torque = saturate(
+        #     computed_torque,
+        #     lower=self.min_motor_effort,
+        #     upper=self.max_motor_effort
+        # )
+        # # print(self.min_motor_effort,self.max_motor_effort)
+        # action = torch.zeros(applied_torque.size(), dtype=torch.float, device=self.device)
+        # action[0][2] = -10#self.Kp*(3-self.dof_pos[0][2])-self.Kd*(self.dof_vel[0][2])#applied_torque[0][2]
+        # print(action)
+        # print(self.dof_pos)
+        # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(action))
+        # self.actions[0][2] = 10
+        targets = self.actions #+ self.default_dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
-    def post_physics_step(self):
+    def post_physics_step(self, test):
         # implement post-physics simulation code here
         #    - e.g. compute reward, compute observations
         self.progress_buf += 1
 
+        # Turn off for testing
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
-        if len(env_ids) > 0:
+        if len(env_ids) > 0 and not test:
             self.reset(env_ids)
 
         self.compute_observations()
@@ -210,8 +254,19 @@ class BezEnv(BaseTask):
         )
 
     def compute_observations(self):
-        self.gym.refresh_dof_state_tensor(self.sim)  # done in step
+        self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+
+        self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
+        self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
+        self.root_pos = self.root_states.view(self.num_envs, 13)[..., 0:3]
+        self.root_orient = self.root_states.view(self.num_envs, 13)[..., 3:7]
+        num_rigid_bodies = int(self.gym.get_sim_rigid_body_count(self.sim) / self.num_envs)
+        self.imu_lin = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 1,
+                       7:10]
+        self.imu_ang = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 1,
+                       10:13]
 
         # self.obs_buf[:] = compute_bez_observations(  # tensors
         #     self.root_states,
@@ -227,10 +282,10 @@ class BezEnv(BaseTask):
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
 
-        positions_offset = torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
-        velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
+        positions_offset = torch_rand_float(0, 1, (len(env_ids), self.num_dof), device=self.device)
+        velocities = torch_rand_float(-1, 0, (len(env_ids), self.num_dof), device=self.device)
 
-        self.dof_pos[env_ids] = self.default_dof_pos[env_ids] * positions_offset
+        self.dof_pos[env_ids] = self.default_dof_pos[env_ids] #* positions_offset
         self.dof_vel[env_ids] = velocities
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -263,7 +318,7 @@ def compute_bez_reward(
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
 
-    return torch.ones_like(reset_buf), torch.zeros_like(reset_buf)
+    return torch.ones_like(reset_buf), torch.ones_like(reset_buf)
 
 
 @torch.jit.script
