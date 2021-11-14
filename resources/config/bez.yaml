@@ -19,6 +19,7 @@ env:
     stiffness: 10 # [N*m/rad]
     damping: 0    # [N*m*s/rad]
     actionScale: 0.5 # ?
+    controlFrequencyInv: 1 # 60 Hz
 
   defaultJointAngles: # = target angles when action = 0.0
 
@@ -57,11 +58,11 @@ env:
   # viewer cam:
   viewer:
     refEnv: 0
-    pos: [ 0, 0, 4 ]  # [m]
-    lookat: [ 1., 1, 3.3 ]  # [m]
+    pos: [ 0.0, 1, 2 ]  # [m]
+    lookat: [ 0, -1, -1 ]  # [m]
 
   asset:
-    assetRoot: resources/assets
+    assetRoot: ../resources/assets
     assetFileName: bez/model/soccerbot_box.urdf
 sim:
   substeps: 2

@@ -2,8 +2,7 @@ import numpy as np
 import os
 import time
 
-from external.isaacgym.python.isaacgym.torch_utils import torch_rand_float, quat_rotate_inverse, quat_rotate, to_torch, \
-    get_axis_params
+
 from utragym.utils.torch_jit_utils import *
 from utragym.envs.base.base_task import BaseTask
 from isaacgym import gymtorch
@@ -41,7 +40,6 @@ class BezEnv(BaseTask):
 
         # other
         self.dt = sim_params.dt
-        print(self.dt)
         # self.max_episode_length_s = self.cfg["env"]["learn"]["episodeLength_s"]
         # self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
         self.Kp = self.cfg["env"]["control"]["stiffness"]
@@ -101,8 +99,6 @@ class BezEnv(BaseTask):
         self.extras = {}
         self.initial_root_states = self.root_states.clone()
         self.initial_root_states[:] = to_torch(self.base_init_state, device=self.device, requires_grad=False)
-        self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
-            (self.num_envs, 1))
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device,
                                    requires_grad=False)
         self.time_out_buf = torch.zeros_like(self.reset_buf)
@@ -182,11 +178,15 @@ class BezEnv(BaseTask):
         self.base_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.bez_handles[0], "base")
 
     def pre_physics_step(self, actions):
+        # implement pre-physics simulation code here
+        #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
-        targets = self.action_scale * self.actions + self.default_dof_pos
+        targets =  self.default_dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
     def post_physics_step(self):
+        # implement post-physics simulation code here
+        #    - e.g. compute reward, compute observations
         self.progress_buf += 1
 
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -197,11 +197,11 @@ class BezEnv(BaseTask):
         self.compute_reward(self.actions)
 
     def compute_reward(self, actions):
-        self.rew_buf[:], self.reset_buf[:] = compute_anymal_reward(
+        self.rew_buf[:], self.reset_buf[:] = compute_bez_reward(
             # tensors
             self.root_states,
 
-            self.progress_buf,
+            self.reset_buf,
             # Dict
 
             # other
@@ -213,15 +213,14 @@ class BezEnv(BaseTask):
         self.gym.refresh_dof_state_tensor(self.sim)  # done in step
         self.gym.refresh_actor_root_state_tensor(self.sim)
 
-
-        self.obs_buf[:] = compute_anymal_observations(  # tensors
-            self.root_states,
-            self.dof_pos,
-            self.default_dof_pos,
-            self.dof_vel,
-            self.actions
-
-        )
+        # self.obs_buf[:] = compute_bez_observations(  # tensors
+        #     self.root_states,
+        #     self.dof_pos,
+        #     self.default_dof_pos,
+        #     self.dof_vel,
+        #     self.actions
+        #
+        # )
 
     def reset(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
@@ -244,63 +243,42 @@ class BezEnv(BaseTask):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-
-
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
+
 
 #####################################################################
 ###=========================jit functions=========================###
 #####################################################################
 
 @torch.jit.script
-def compute_anymal_reward(
-    # tensors
-    root_states: Tensor,
+def compute_bez_reward(
+        # tensors
+        root_states: Tensor,
+        reset_buf: Tensor,
+        # Dict
 
-    # Dict
-
-    # other
-    base_index: int,
+        # other
+        base_index: int,
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
 
-    # prepare quantities (TODO: return from obs ?)
-    base_quat = root_states[:, 3:7]
-    base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10])
-    base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13])
-
-    # velocity tracking reward
-
-
-    # torque penalty
-
-
-    total_reward = 0
-    total_reward = torch.clip(total_reward, 0., None)
-    # reset agents
-    reset = torch.norm(contact_forces[:, base_index, :], dim=1) > 1.
-    reset = reset | torch.any(torch.norm(contact_forces[:, knee_indices, :], dim=2) > 1., dim=1)
-    time_out = episode_lengths > max_episode_length  # no terminal reward for time-outs
-    reset = reset | time_out
-
-    return total_reward.detach(), reset
+    return torch.ones_like(reset_buf), torch.zeros_like(reset_buf)
 
 
 @torch.jit.script
-def compute_anymal_observations(root_states: Tensor,
-                                commands: Tensor,
-                                dof_pos: Tensor,
-                                default_dof_pos: Tensor,
-                                dof_vel: Tensor,
-                                gravity_vec: Tensor,
-                                actions: Tensor,
-                                lin_vel_scale: float,
-                                ang_vel_scale: float,
-                                dof_pos_scale: float,
-                                dof_vel_scale: float
-                                ) -> Tensor:
-
+def compute_bez_observations(root_states: Tensor,
+                             commands: Tensor,
+                             dof_pos: Tensor,
+                             default_dof_pos: Tensor,
+                             dof_vel: Tensor,
+                             gravity_vec: Tensor,
+                             actions: Tensor,
+                             lin_vel_scale: float,
+                             ang_vel_scale: float,
+                             dof_pos_scale: float,
+                             dof_vel_scale: float
+                             ) -> Tensor:
     # base_position = root_states[:, 0:3]
     base_quat = root_states[:, 3:7]
     base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10]) * lin_vel_scale
@@ -308,14 +286,15 @@ def compute_anymal_observations(root_states: Tensor,
     projected_gravity = quat_rotate(base_quat, gravity_vec)
     dof_pos_scaled = (dof_pos - default_dof_pos) * dof_pos_scale
 
-    commands_scaled = commands*torch.tensor([lin_vel_scale, lin_vel_scale, ang_vel_scale], requires_grad=False, device=commands.device)
+    commands_scaled = commands * torch.tensor([lin_vel_scale, lin_vel_scale, ang_vel_scale], requires_grad=False,
+                                              device=commands.device)
 
     obs = torch.cat((base_lin_vel,
                      base_ang_vel,
                      projected_gravity,
                      commands_scaled,
                      dof_pos_scaled,
-                     dof_vel*dof_vel_scale,
+                     dof_vel * dof_vel_scale,
                      actions
                      ), dim=-1)
 
