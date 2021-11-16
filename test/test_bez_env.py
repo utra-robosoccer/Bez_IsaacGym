@@ -2,6 +2,7 @@
 
 # utragym
 from isaacgym import gymutil, gymapi
+from isaacgym.torch_utils import torch_rand_float
 from utragym.utils.config import parse_sim_params
 from utragym.utils import *
 from utragym.envs import KickEnv
@@ -11,6 +12,7 @@ import os
 import yaml
 import unittest
 import sys
+from random import randint
 
 
 class TestBezEnv(unittest.TestCase):
@@ -106,6 +108,7 @@ class TestBezEnv(unittest.TestCase):
 
     """
     Random step environment test
+    Better when fixBaseLink = True
     """
 
     def test_random_action_agent(self):
@@ -119,7 +122,7 @@ class TestBezEnv(unittest.TestCase):
                 if len(env_ids) > 0:
                     self.env.reset(env_ids)
             else:
-                action = 3 * torch.rand(self.env.actions.size(), dtype=torch.float, device=self.env.device)
+                action = randint(-3, 3) * torch.rand(self.env.actions.size(), dtype=torch.float, device=self.env.device)
                 self.env.step(action, True)
 
             # render the env
@@ -149,21 +152,18 @@ class TestBezEnv(unittest.TestCase):
                 if len(env_ids) > 0:
                     self.env.reset(env_ids)
             else:
-                # action = -3 * torch.rand(self.env.actions.size(), dtype=torch.float, device=self.env.device)
                 # animate the dofs
-                speed = 2
-                # action[0][current_dof] = speed
-                print(current_dof)
+                speed = 1
                 for i in range(self.env.num_envs):
                     if anim_state == ANIM_SEEK_LOWER:
-                        action[i][current_dof] -= speed* self.env.dt
-                        if action[i][current_dof] <= self.env.dof_limits_lower[current_dof]:
-                            action[i][current_dof] = self.env.dof_limits_lower[current_dof]
+                        action[i][current_dof] -= speed * self.env.dt
+                        if action[i][current_dof] <= self.env.dof_pos_limits_lower[current_dof]:
+                            action[i][current_dof] = self.env.dof_pos_limits_lower[current_dof]
                             anim_state = ANIM_SEEK_UPPER
                     elif anim_state == ANIM_SEEK_UPPER:
                         action[i][current_dof] += speed * self.env.dt
-                        if action[i][current_dof] >= self.env.dof_limits_upper[current_dof]:
-                            action[i][current_dof] = self.env.dof_limits_upper[current_dof]
+                        if action[i][current_dof] >= self.env.dof_pos_limits_upper[current_dof]:
+                            action[i][current_dof] = self.env.dof_pos_limits_upper[current_dof]
                             anim_state = ANIM_SEEK_DEFAULT
                     if anim_state == ANIM_SEEK_DEFAULT:
                         action[i][current_dof] -= speed * self.env.dt
@@ -174,12 +174,12 @@ class TestBezEnv(unittest.TestCase):
                         action[i][current_dof] = self.env.default_dof_pos[i][current_dof]
                         current_dof = (current_dof + 1) % 18
                         anim_state = ANIM_SEEK_LOWER
-                print("here")
-                print(action)
-                print(self.env.dof_pos)
+
                 self.env.step(action, True)
 
             # render the env
             self.env.render()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -10,6 +10,28 @@ from isaacgym import gymapi
 import torch
 from torch.tensor import Tensor
 from typing import Tuple, Dict
+import enum
+
+
+class Joints(enum.IntEnum):
+    HEAD_1 = 0
+    HEAD_2 = 1
+    LEFT_ARM_1 = 2
+    LEFT_ARM_2 = 3
+    LEFT_LEG_1 = 4
+    LEFT_LEG_2 = 5
+    LEFT_LEG_3 = 6
+    LEFT_LEG_4 = 7
+    LEFT_LEG_5 = 8
+    LEFT_LEG_6 = 9
+    RIGHT_ARM_1 = 10
+    RIGHT_ARM_2 = 11
+    RIGHT_LEG_1 = 12
+    RIGHT_LEG_2 = 13
+    RIGHT_LEG_3 = 14
+    RIGHT_LEG_4 = 15
+    RIGHT_LEG_5 = 16
+    RIGHT_LEG_6 = 17
 
 
 class KickEnv(BezEnv):
@@ -35,7 +57,7 @@ class KickEnv(BezEnv):
         self.base_init_state = state
 
         # default joint positions
-        self.named_default_joint_angles = self.cfg["env"]["defaultJointAngles"] # defaultJointAngles  readyJointAngles
+        self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
 
         # other
         self.dt = sim_params.dt
@@ -47,13 +69,26 @@ class KickEnv(BezEnv):
         # for key in self.rew_scales.keys():
         #     self.rew_scales[key] *= self.dt
 
-        self.cfg["env"]["numObservations"] = 51
-        self.cfg["env"]["numActions"] = 18
+        # Observation dimension
+        self.orn_dim = 2
+        self.imu_dim = 6
+        self.feet_dim = 8
+        self.dof_dim = 18  # or 16 if we remove head
+        self.rnn_dim = 1
+        self.ball_dim = 2  # ball distance
+
+        # Limits
+        self.imu_max_ang_vel = 8.7266
+        self.imu_max_lin_acc = 2. * 9.81
+        self.AX_12_velocity = (59 / 60) * 2 * np.pi # Ask sharyar for later - 11.9 rad/s
+        self.MX_28_velocity = 2 * np.pi # 24.5 rad/s
+
+        self.cfg["env"]["numObservations"] = self.dof_dim + self.imu_dim + self.orn_dim + self.ball_dim # 30
+        self.cfg["env"]["numActions"] = self.dof_dim
 
         self.cfg["device_type"] = device_type
         self.cfg["device_id"] = device_id
         self.cfg["headless"] = headless
-
         super().__init__(cfg=self.cfg)
 
         # camera view
@@ -69,6 +104,7 @@ class KickEnv(BezEnv):
         dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
         rigid_body_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
 
+        # Update state tensors
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
@@ -87,9 +123,9 @@ class KickEnv(BezEnv):
         self.imu_ang = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 1,
                        10:13]
 
+        # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
-
         for i in range(self.cfg["env"]["numActions"]):
             name = self.dof_names[i]
             angle = self.named_default_joint_angles[name]
@@ -160,7 +196,7 @@ class KickEnv(BezEnv):
         motor_efforts = [prop['effort'] for prop in actuator_props]
 
         self.max_motor_effort = to_torch(motor_efforts, device=self.device)
-        self.min_motor_effort = -1*to_torch(motor_efforts, device=self.device)
+        self.min_motor_effort = -1 * to_torch(motor_efforts, device=self.device)
 
         self.num_bodies = self.gym.get_asset_rigid_body_count(bez_asset)
         self.num_dof = self.gym.get_asset_dof_count(bez_asset)
@@ -170,6 +206,8 @@ class KickEnv(BezEnv):
             actuator_props['driveMode'][i] = self.cfg["env"]["urdfAsset"]["defaultDofDriveMode"]
             actuator_props['stiffness'][i] = self.Kp
             actuator_props['damping'][i] = self.Kd
+            actuator_props["armature"][i] = self.cfg["env"]["urdfAsset"]["armature"]
+            actuator_props["velocity"][i] = self.MX_28_velocity
 
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
@@ -179,37 +217,38 @@ class KickEnv(BezEnv):
         for i in range(self.num_envs):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
-            bez_handle = self.gym.create_actor(env_ptr, bez_asset, start_pose, "bez", i, 1, 1)  # 0 for no self collision
+            bez_handle = self.gym.create_actor(env_ptr, bez_asset, start_pose, "bez", i, 1,
+                                               1)  # 0 for no self collision
             self.gym.set_actor_dof_properties(env_ptr, bez_handle, actuator_props)
             self.gym.enable_actor_dof_force_sensors(env_ptr, bez_handle)
             self.envs.append(env_ptr)
             self.bez_handles.append(bez_handle)
 
-        self.dof_limits_lower = []
-        self.dof_limits_upper = []
+        self.dof_pos_limits_lower = []
+        self.dof_pos_limits_upper = []
 
         dof_prop = self.gym.get_actor_dof_properties(env_ptr, bez_handle)
         for j in range(self.num_dof):
             if dof_prop['lower'][j] > dof_prop['upper'][j]:
-                self.dof_limits_lower.append(dof_prop['upper'][j])
-                self.dof_limits_upper.append(dof_prop['lower'][j])
+                self.dof_pos_limits_lower.append(dof_prop['upper'][j])
+                self.dof_pos_limits_upper.append(dof_prop['lower'][j])
             else:
-                self.dof_limits_lower.append(dof_prop['lower'][j])
-                self.dof_limits_upper.append(dof_prop['upper'][j])
+                self.dof_pos_limits_lower.append(dof_prop['lower'][j])
+                self.dof_pos_limits_upper.append(dof_prop['upper'][j])
 
-        self.dof_limits_lower = to_torch(self.dof_limits_lower, device=self.device)
-        self.dof_limits_upper = to_torch(self.dof_limits_upper, device=self.device)
+        self.dof_pos_limits_lower = to_torch(self.dof_pos_limits_lower, device=self.device)
+        self.dof_pos_limits_upper = to_torch(self.dof_pos_limits_upper, device=self.device)
 
         self.base_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.bez_handles[0], "base")
+
+    def _imu(self):
+        pass
 
     def pre_physics_step(self, actions):
         # implement pre-physics simulation code here
         #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
-        # print('here')
-        # print(self.actions)
-        # print(self.dof_pos)
-        # print(self.actions-self.dof_pos)
+
         # computed_torque = self.Kp*(self.actions-self.dof_pos)
         # computed_torque -= self.Kd*(self.actions-self.dof_vel)
         # applied_torque = saturate(
@@ -217,14 +256,11 @@ class KickEnv(BezEnv):
         #     lower=self.min_motor_effort,
         #     upper=self.max_motor_effort
         # )
-        # # print(self.min_motor_effort,self.max_motor_effort)
         # action = torch.zeros(applied_torque.size(), dtype=torch.float, device=self.device)
         # action[0][2] = -10#self.Kp*(3-self.dof_pos[0][2])-self.Kd*(self.dof_vel[0][2])#applied_torque[0][2]
-        # print(action)
-        # print(self.dof_pos)
         # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(action))
         # self.actions[0][2] = 10
-        targets = self.actions #+ self.default_dof_pos
+        targets = self.actions + self.default_dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
     def post_physics_step(self, test):
@@ -285,7 +321,7 @@ class KickEnv(BezEnv):
         positions_offset = torch_rand_float(0, 1, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-1, 0, (len(env_ids), self.num_dof), device=self.device)
 
-        self.dof_pos[env_ids] = self.default_dof_pos[env_ids] #* positions_offset
+        self.dof_pos[env_ids] = self.default_dof_pos[env_ids]  # * positions_offset
         self.dof_vel[env_ids] = velocities
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)

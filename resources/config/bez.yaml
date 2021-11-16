@@ -9,8 +9,8 @@ env:
     restitution: 0.        # [-]
 
   baseInitState:
-    pos: [ 0.0, 0.0, 0.37 ] # xyz [m]
-    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
+    pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
+    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
@@ -63,7 +63,7 @@ env:
 
   urdfAsset:
     collapseFixedJoints: True
-    fixBaseLink: True
+    fixBaseLink: False
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
     density: 0.001
@@ -71,8 +71,8 @@ env:
     linear_damping: 0.0
     thickness: 0.01
     disable_gravity: False
-    armature: 0.0
-    defaultDofDriveMode: 4 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
+    armature: 0.01
+    defaultDofDriveMode: 1 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
 
   # viewer cam:
   viewer:
@@ -91,12 +91,12 @@ sim:
   physx:
     num_threads: 4
     solver_type: 1  # 0: pgs, 1: tgs
-    num_position_iterations: 8
+    num_position_iterations: 4
     num_velocity_iterations: 1
     contact_offset: 0.002
     rest_offset: 0.0
     bounce_threshold_velocity: 0.2
     max_depenetration_velocity: 1000.0
-    use_gpu_pipeline: true
+    use_gpu_pipeline: True
 task:
   randomize: False
