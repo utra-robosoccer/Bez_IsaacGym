@@ -123,7 +123,6 @@ class BezEnv():
 
         return sim
 
-    #def step(self, actions, test):
     def step(self, actions):
         if self.dr_randomizations.get('actions', None):
             actions = self.dr_randomizations['actions']['noise_lambda'](actions)
@@ -141,7 +140,7 @@ class BezEnv():
             self.gym.fetch_results(self.sim, True)
 
         # compute observations, rewards, resets, ...
-        #self.post_physics_step(test)
+        self.post_physics_step()
 
         if self.dr_randomizations.get('observations', None):
             self.obs_buf = self.dr_randomizations['observations']['noise_lambda'](self.obs_buf)
@@ -410,7 +409,7 @@ class BezEnv():
     def pre_physics_step(self, actions):
         raise NotImplementedError
 
-    def post_physics_step(self, test):
+    def post_physics_step(self):
         raise NotImplementedError
 
 

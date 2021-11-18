@@ -20,9 +20,12 @@ class TestBezEnv(unittest.TestCase):
 
     def setUp(self) -> None:
         # load parameters
-        with open(os.path.join(os.getcwd(), '../resources/config/bez.yaml'), 'r') as f:
+        with open(os.path.join(os.getcwd(), 'resources/config/bez.yaml'), 'r') as f:
             cfg = yaml.load(f, Loader=yaml.SafeLoader)
 
+        # load parameters
+        with open(os.path.join(os.getcwd(), 'resources/config/rlg/rlg_bez_kick.yaml'), 'r') as f:
+            cfg_train = yaml.load(f, Loader=yaml.SafeLoader)
         # remove file name from system arguments
         sys.argv.pop()
 
@@ -57,15 +60,15 @@ class TestBezEnv(unittest.TestCase):
         )
 
         # Getting sim params
-        sim_params = parse_sim_params(args, cfg)
+        sim_params = parse_sim_params(args, cfg, cfg_train)
 
         # create environment
         self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda",
                            device_id=args.compute_device_id, headless=args.headless)
 
         # Testing parameter
-        self.sim_length = 10000
-        self.reset_length = 10000
+        self.sim_length = 30000
+        self.reset_length = 30000
 
     """
     Reset environment tests
@@ -101,7 +104,7 @@ class TestBezEnv(unittest.TestCase):
                     self.env.reset(env_ids)
             else:
                 action = torch.zeros(self.env.actions.size(), dtype=torch.float, device=self.env.device)
-                self.env.step(action, True)
+                self.env.step(action)
 
             # render the env
             self.env.render()
@@ -123,7 +126,7 @@ class TestBezEnv(unittest.TestCase):
                     self.env.reset(env_ids)
             else:
                 action = randint(-3, 3) * torch.rand(self.env.actions.size(), dtype=torch.float, device=self.env.device)
-                self.env.step(action, True)
+                self.env.step(action)
 
             # render the env
             self.env.render()
@@ -175,7 +178,7 @@ class TestBezEnv(unittest.TestCase):
                         current_dof = (current_dof + 1) % 18
                         anim_state = ANIM_SEEK_LOWER
 
-                self.env.step(action, True)
+                self.env.step(action)
 
             # render the env
             self.env.render()
