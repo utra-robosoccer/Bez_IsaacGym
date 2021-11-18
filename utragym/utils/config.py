@@ -25,7 +25,7 @@ def set_np_formatting():
 
 def warn_task_name():
     raise Exception(
-        "Unrecognized task!\nTask should be one of: [BallBalance, Cartpole, CartpoleYUp, Ant, Humanoid, Anymal, FrankaCabinet, Quadcopter, ShadowHand, ShadowHandLSTM, ShadowHandFFOpenAI, ShadowHandFFOpenAITest, ShadowHandOpenAI, ShadowHandOpenAITest, Ingenuity]")
+        "Unrecognized task!\nTask should be one of: [GoalieEnv, KickEnv]")
 
 
 def set_seed(seed, torch_deterministic=False):
@@ -57,83 +57,22 @@ def set_seed(seed, torch_deterministic=False):
 
 def retrieve_cfg(args, use_rlg_config=False):
     if use_rlg_config:
-        if args.task == "BallBalance":
-            return os.path.join(args.logdir, "ball_balance"), "cfg/train/rlg/rlg_ball.yaml", "cfg/ball_balance.yaml"
-        elif args.task == "Cartpole":
-            return os.path.join(args.logdir, "cartpole"), "cfg/train/rlg/rlg_cartpole.yaml", "cfg/cartpole.yaml"
-        elif args.task == "CartpoleYUp":
-            return os.path.join(args.logdir, "cartpole_y_up"), "cfg/train/rlg/rlg_cartpole.yaml", "cfg/cartpole.yaml"
-        elif args.task == "Ant":
-            return os.path.join(args.logdir, "ant"), "cfg/train/rlg/rlg_ant.yaml", "cfg/ant.yaml"
-        elif args.task == "Humanoid":
-            return os.path.join(args.logdir, "humanoid"), "cfg/train/rlg/rlg_humanoid.yaml", "cfg/humanoid.yaml"
-        elif args.task == "FrankaCabinet":
-            return os.path.join(args.logdir, "franka_cabinet"), "cfg/train/rlg/rlg_franka_cabinet.yaml", "cfg/franka_cabinet.yaml"
-        elif args.task == "Quadcopter":
-            return os.path.join(args.logdir, "quadcopter"), "cfg/train/rlg/rlg_quadcopter.yaml", "cfg/quadcopter.yaml"
-        elif args.task == "Anymal":
-            return os.path.join(args.logdir, "anymal"), "cfg/train/rlg/rlg_anymal.yaml", "cfg/anymal.yaml"
-        elif args.task == "ShadowHand":
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand.yaml", "cfg/shadow_hand.yaml"
-        elif args.task == "ShadowHandLSTM":
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand_lstm.yaml", "cfg/shadow_hand_lstm.yaml"
-        elif args.task == "ShadowHandFFOpenAI":
-            # Asymmetric FF policy and value functions with OpenAI observations
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand_asymm.yaml", "cfg/shadow_hand_openai.yaml"
-        elif args.task == "ShadowHandFFOpenAITest":
-            # Testing the asymmetric FF policy with OpenAI observations
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand_asymm.yaml", "cfg/shadow_hand_test.yaml"
-        elif args.task == "ShadowHandOpenAI":
-            args.task = "ShadowHand"
-            # Asymmetric LSTM policy and value functions with OpenAI observations
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand_asymm_lstm.yaml", "cfg/shadow_hand_openai.yaml"
-        elif args.task == "ShadowHandOpenAITest":
-            # Testing the asymmetric LSTM policy with OpenAI observations
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlg/rlg_shadow_hand_asymm_lstm.yaml", "cfg/shadow_hand_test.yaml"
-        elif args.task == "Ingenuity":
-            return os.path.join(args.logdir, "ingenuity"), "cfg/train/rlg/rlg_ingenuity.yaml", "cfg/ingenuity.yaml"
+        if args.task == "GoalieEnv":
+            return os.path.join(args.logdir, "GoalieEnv"), "resources/config/rlg/rlg_bez_goalie.yaml", "resources/config/bez.yaml"
+        elif args.task == "KickEnv":
+            return os.path.join(args.logdir, "goalieEnv"), "resources/config/rlg/rlg_bez_kick.yaml", "resources/config/bez.yaml"
         else:
             warn_task_name()
     else:
-        if args.task == "BallBalance":
-            return os.path.join(args.logdir, "ball_balance"), "cfg/train/rlpt/pytorch_ppo_ball_balance.yaml", "cfg/ball_balance.yaml"
-        elif args.task == "Cartpole":
-            return os.path.join(args.logdir, "cartpole"), "cfg/train/rlpt/pytorch_ppo_cartpole.yaml", "cfg/cartpole.yaml"
-        elif args.task == "CartpoleYUp":
-            return os.path.join(args.logdir, "cartpole_y_up"), "cfg/train/rlpt/pytorch_ppo_cartpole.yaml", "cfg/cartpole.yaml"
-        elif args.task == "Ant":
-            return os.path.join(args.logdir, "ant"), "cfg/train/rlpt/pytorch_ppo_ant.yaml", "cfg/ant.yaml"
-        elif args.task == "Humanoid":
-            return os.path.join(args.logdir, "humanoid"), "cfg/train/rlpt/pytorch_ppo_humanoid.yaml", "cfg/humanoid.yaml"
-        elif args.task == "FrankaCabinet":
-            return os.path.join(args.logdir, "franka_cabinet"), "cfg/train/rlpt/pytorch_ppo_franka_cabinet.yaml", "cfg/franka_cabinet.yaml"
-        elif args.task == "Quadcopter":
-            return os.path.join(args.logdir, "quadcopter"), "cfg/train/rlpt/pytorch_ppo_quadcopter.yaml", "cfg/quadcopter.yaml"
-        elif args.task == "Anymal":
-            return os.path.join(args.logdir, "anymal"), "cfg/train/rlpt/pytorch_ppo_anymal.yaml", "cfg/anymal.yaml"
-        elif args.task == "ShadowHand":
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlpt/pytorch_ppo_shadow_hand.yaml", "cfg/shadow_hand.yaml"
-        elif args.task == "ShadowHandFFOpenAI":
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlpt/pytorch_ppo_shadow_hand.yaml", "cfg/shadow_hand_openai.yaml"
-        elif args.task == "ShadowHandFFOpenAITest":
-            args.task = "ShadowHand"
-            return os.path.join(args.logdir, "shadow_hand"), "cfg/train/rlpt/pytorch_ppo_shadow_hand.yaml", "cfg/shadow_hand_test.yaml"
-        elif args.task == "Ingenuity":
-            return os.path.join(args.logdir, "ingenuity"), "cfg/train/rlpt/pytorch_ppo_ingenuity.yaml", "cfg/ingenuity.yaml"
-        else:
-            warn_task_name()
+        raise NotImplementedError
 
 
 def load_cfg(args, use_rlg_config=False):
-    with open(os.path.join(os.getcwd(), args.cfg_train), 'r') as f:
+    parent_path = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+    with open(os.path.join(parent_path, args.cfg_train), 'r') as f:
         cfg_train = yaml.load(f, Loader=yaml.SafeLoader)
 
-    with open(os.path.join(os.getcwd(), args.cfg_env), 'r') as f:
+    with open(os.path.join(parent_path, args.cfg_env), 'r') as f:
         cfg = yaml.load(f, Loader=yaml.SafeLoader)
 
     # Override number of environments if passed on the command line
@@ -220,7 +159,7 @@ def load_cfg(args, use_rlg_config=False):
     return cfg, cfg_train, logdir
 
 
-def parse_sim_params(args, cfg):
+def parse_sim_params(args, cfg, cfg_train):
     # initialize sim
     sim_params = gymapi.SimParams()
     sim_params.dt = 1./60.
@@ -269,8 +208,8 @@ def get_args(benchmark=False, use_rlg_config=False):
             "help": "Force display off at all times"},
         {"name": "--horovod", "action": "store_true", "default": False,
             "help": "Use horovod for multi-gpu training, have effect only with rl_games RL library"},
-        {"name": "--task", "type": str, "default": "Humanoid",
-            "help": "Can be BallBalance, Cartpole, CartpoleYUp, Ant, Humanoid, Anymal, FrankaCabinet, Quadcopter, ShadowHand, Ingenuity"},
+        {"name": "--task", "type": str, "default": "GoalieEnv",
+            "help": "Can be KickEnv, GoalieEnv"},
         {"name": "--task_type", "type": str,
             "default": "Python", "help": "Choose Python or C++"},
         {"name": "--rl_device", "type": str, "default": "cuda:0",
