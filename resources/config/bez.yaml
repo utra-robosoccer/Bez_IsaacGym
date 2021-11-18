@@ -8,9 +8,15 @@ env:
     dynamicFriction: 1 # [-]
     restitution: 0.        # [-]
 
-  baseInitState:
+  bezInitState:
     pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
+    vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
+    vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
+
+  ballInitState:
+    pos: [ 0.15, 0, 0.1 ] # xyz [m]
+    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
@@ -81,8 +87,11 @@ env:
     lookat: [ 0, 0, 0 ]  # [m]
 
   asset:
-    assetRoot: ../resources/assets
-    assetFileName: bez/model/soccerbot_box.urdf
+    assetRoot: resources/assets
+    assetFileNameBez: bez/model/soccerbot_box.urdf
+    assetFileNameBall: objects/ball.urdf
+
+
 sim:
   substeps: 2
   gravity: [0., 0. ,-9.81]  # [m/s^2]

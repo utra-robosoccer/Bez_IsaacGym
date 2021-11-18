@@ -60,7 +60,7 @@ def retrieve_cfg(args, use_rlg_config=False):
         if args.task == "GoalieEnv":
             return os.path.join(args.logdir, "GoalieEnv"), "resources/config/rlg/rlg_bez_goalie.yaml", "resources/config/bez.yaml"
         elif args.task == "KickEnv":
-            return os.path.join(args.logdir, "goalieEnv"), "resources/config/rlg/rlg_bez_kick.yaml", "resources/config/bez.yaml"
+            return os.path.join(args.logdir, "KickEnv"), "rl-isaac-gym/resources/config/rlg/rlg_bez_kick.yaml", "rl-isaac-gym/resources/config/bez.yaml"
         else:
             warn_task_name()
     else:
