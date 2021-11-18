@@ -5,9 +5,9 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import torch
 import numpy as np
 from isaacgym.torch_utils import *
+import torch
 
 
 @torch.jit.script

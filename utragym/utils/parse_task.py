@@ -5,22 +5,14 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-from rlgpu.tasks.cartpole import Cartpole
-from rlgpu.tasks.cartpole_y_up import CartpoleYUp
-from rlgpu.tasks.ball_balance import BallBalance
-from rlgpu.tasks.quadcopter import Quadcopter
-from rlgpu.tasks.ant import Ant
-from rlgpu.tasks.humanoid import Humanoid
-from rlgpu.tasks.franka import FrankaCabinet
-from rlgpu.tasks.shadow_hand import ShadowHand
-from rlgpu.tasks.ingenuity import Ingenuity
-from rlgpu.tasks.anymal import Anymal
 from rlgpu.tasks.base.vec_task import VecTaskCPU, VecTaskGPU, VecTaskPython
-
-from rlgpu.utils.config import warn_task_name
+from utragym.envs.base.bez_env import BezEnv
+from utragym.envs.kick_env import KickEnv
+from utragym.envs.goalie_env import GoalieEnv
+from utragym.utils.config import *
 
 from isaacgym import rlgpu
-from rlgpu.utils.config import warn_task_name
+from utragym.utils.config import warn_task_name
 
 import json
 
