@@ -1,1 +1,2 @@
-info about this project
+## RL Isaac Gym Repository - For reinforcement learning
+
