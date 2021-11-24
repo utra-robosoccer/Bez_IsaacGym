@@ -60,10 +60,10 @@ class BezEnv():
             self.num_envs, device=self.device, dtype=torch.long)
         self.progress_buf = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.long)
+
         self.randomize_buf = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.long)
         self.extras = {}
-
         self.original_props = {}
         self.dr_randomizations = {}
         self.first_randomization = True

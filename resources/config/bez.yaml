@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 1
+  numEnvs: 4
   envSpacing: 0.75 # [m]
 
   plane:

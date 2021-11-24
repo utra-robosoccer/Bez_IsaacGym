@@ -63,8 +63,7 @@ class TestBezEnv(unittest.TestCase):
         sim_params = parse_sim_params(args, cfg, cfg_train)
 
         # create environment
-        self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda",
-                           device_id=args.compute_device_id, headless=args.headless)
+        self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda", device_id=args.compute_device_id, headless=args.headless)
 
         # Testing parameter
         self.sim_length = 30000
@@ -117,10 +116,11 @@ class TestBezEnv(unittest.TestCase):
     def test_random_action_agent(self):
 
         # check reset
-        for step_num in range(self.sim_length):
+        for step_num in range(1,self.sim_length):
 
             # reset every certain number of steps
             if step_num % self.reset_length == 0:
+                print(step_num, self.reset_length)
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
                     self.env.reset(env_ids)
@@ -133,6 +133,7 @@ class TestBezEnv(unittest.TestCase):
 
     """
     Motor environment test
+    Better when fixBaseLink = True
     """
 
     def test_motor_action_agent(self):
