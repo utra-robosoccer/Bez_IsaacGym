@@ -1,15 +1,15 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 4
-  envSpacing: 0.75 # [m]
+  numEnvs: 1 # 10 4096
+  envSpacing: 1 # [m]
 
   plane:
-    staticFriction: 1  # [-]
-    dynamicFriction: 1 # [-]
-    restitution: 0.        # [-]
+    staticFriction: 0  # [-]
+    dynamicFriction: 0 # [-]
+    restitution: 0        # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
+    pos: [ 0.0, 0.0, 0.4 ] # xyz [m] 0.37 for default or 0.33 for ready
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
@@ -31,7 +31,7 @@ env:
     right_leg_motor_0: 0.0 # [rad]
     right_leg_motor_1 : 0.0 # [rad]
     right_leg_motor_2: 0 # [rad]
-    right_leg_motor_3: 0 # [rad]
+    right_leg_motor_3: 0.0 # [rad]
     right_leg_motor_4: 0 # [rad]
     right_leg_motor_5: 0.0 # [rad]
     left_leg_motor_0: 0.0 # [rad]
@@ -41,9 +41,9 @@ env:
     left_leg_motor_4: 0 # [rad]
     left_leg_motor_5: 0.0 # [rad]
     right_arm_motor_0: 0.0 # [rad]
-    right_arm_motor_1: 0 # [rad]
+    right_arm_motor_1: 0.0 # [rad]
     left_arm_motor_0: 0.0 # [rad]
-    left_arm_motor_1: 0 # [rad]
+    left_arm_motor_1: 0.0 # [rad]
     head_motor_0: 0.0 # [rad]
     head_motor_1: 0.0 # [rad]
 
@@ -69,7 +69,7 @@ env:
 
   urdfAsset:
     collapseFixedJoints: True
-    fixBaseLink: False
+    fixBaseLink: True
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
     density: 0.001
@@ -79,6 +79,22 @@ env:
     disable_gravity: False
     armature: 0.01
     defaultDofDriveMode: 1 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
+
+
+  learn:
+    # rewards
+    linearVelocityXYRewardScale: 1.0
+    angularVelocityZRewardScale: 0.5
+    torqueRewardScale: -0.000025
+
+    # normalization
+    linearVelocityScale: 2.0
+    angularVelocityScale: 0.25
+    dofPositionScale: 1.0
+    dofVelocityScale: 0.05
+
+    # episode length in seconds
+    episodeLength_s: 50
 
   # viewer cam:
   viewer:
@@ -107,5 +123,6 @@ sim:
     bounce_threshold_velocity: 0.2
     max_depenetration_velocity: 1000.0
     use_gpu_pipeline: True
+
 task:
   randomize: False
