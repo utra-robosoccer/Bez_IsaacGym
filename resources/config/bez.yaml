@@ -1,15 +1,15 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 1 # 10 4096
+  numEnvs: 4096 # 10 4096
   envSpacing: 1 # [m]
 
   plane:
-    staticFriction: 0  # [-]
-    dynamicFriction: 0 # [-]
-    restitution: 0        # [-]
+    staticFriction: 2  # [-]
+    dynamicFriction: 2 # [-]
+    restitution: 0.001        # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.4 ] # xyz [m] 0.37 for default or 0.33 for ready
+    pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
@@ -69,7 +69,7 @@ env:
 
   urdfAsset:
     collapseFixedJoints: True
-    fixBaseLink: True
+    fixBaseLink: False
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
     density: 0.001

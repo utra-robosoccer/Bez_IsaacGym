@@ -177,10 +177,7 @@ class TestBezEnv(unittest.TestCase):
                     elif anim_state == ANIM_FINISHED:
                         action[i][current_dof] = self.env.default_dof_pos[i][current_dof]
                         current_dof = (current_dof + 1) % 18
-                        # if current_dof == 2 or current_dof == 10:
-                        #     current_dof = (current_dof + 1) % 18
                         anim_state = ANIM_SEEK_LOWER
-                print(current_dof)
                 self.env.step(action)
 
             # render the env
