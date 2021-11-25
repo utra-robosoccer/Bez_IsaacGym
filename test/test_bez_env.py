@@ -63,8 +63,7 @@ class TestBezEnv(unittest.TestCase):
         sim_params = parse_sim_params(args, cfg, cfg_train)
 
         # create environment
-        self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda",
-                           device_id=args.compute_device_id, headless=args.headless)
+        self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda", device_id=args.compute_device_id, headless=args.headless)
 
         # Testing parameter
         self.sim_length = 30000
@@ -117,10 +116,11 @@ class TestBezEnv(unittest.TestCase):
     def test_random_action_agent(self):
 
         # check reset
-        for step_num in range(self.sim_length):
+        for step_num in range(1,self.sim_length):
 
             # reset every certain number of steps
             if step_num % self.reset_length == 0:
+                print(step_num, self.reset_length)
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
                     self.env.reset(env_ids)
@@ -133,6 +133,7 @@ class TestBezEnv(unittest.TestCase):
 
     """
     Motor environment test
+    Better when fixBaseLink = True
     """
 
     def test_motor_action_agent(self):
@@ -156,7 +157,7 @@ class TestBezEnv(unittest.TestCase):
                     self.env.reset(env_ids)
             else:
                 # animate the dofs
-                speed = 1
+                speed = 3
                 for i in range(self.env.num_envs):
                     if anim_state == ANIM_SEEK_LOWER:
                         action[i][current_dof] -= speed * self.env.dt
@@ -177,7 +178,6 @@ class TestBezEnv(unittest.TestCase):
                         action[i][current_dof] = self.env.default_dof_pos[i][current_dof]
                         current_dof = (current_dof + 1) % 18
                         anim_state = ANIM_SEEK_LOWER
-
                 self.env.step(action)
 
             # render the env
