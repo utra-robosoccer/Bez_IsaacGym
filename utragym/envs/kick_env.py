@@ -142,7 +142,7 @@ class KickEnv(BezEnv):
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
         self.goal = torch.tensor([[1, 0]] * self.num_envs, device='cuda:0')
-        self.ball_init = torch.tensor(self.ball_init_state[0:3] * self.num_envs, device='cuda:0')
+        self.ball_init = torch.tensor([self.ball_init_state[0:2]] * self.num_envs, device='cuda:0')
         self.initial_root_states = self.root_states.clone()
         self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state] * self.num_envs,
                                                device=self.device, requires_grad=False)
@@ -154,15 +154,13 @@ class KickEnv(BezEnv):
         self.root_pos_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 0:3]
         self.root_orient_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 3:7]
         self.root_vel_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 7:10]
-        num_rigid_bodies = int(self.gym.get_sim_rigid_body_count(self.sim) / self.num_envs)
-        self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
-                                                                            3)  # shape: num_envs, num_bodies, xyz axis
-        self.root_vel_bez = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 0,
+        self.root_vel_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1,
                             7:10]
-        self.root_ang_bez = self.rigid_body.view(self.num_envs, num_rigid_bodies, 13)[..., 0,
+        self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1,
                             10:13]
         self.prev_lin_vel = torch.tensor([0, 0, 0], device='cuda:0')
-
+        self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17, 0:3]
+        self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29, 0:3]
         # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos_bez, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
@@ -213,8 +211,8 @@ class KickEnv(BezEnv):
         asset_options = gymapi.AssetOptions()
         asset_options.default_dof_drive_mode = self.cfg["env"]["urdfAsset"]["defaultDofDriveMode"]
         asset_options.collapse_fixed_joints = self.cfg["env"]["urdfAsset"]["collapseFixedJoints"]
-        asset_options.replace_cylinder_with_capsule = self.cfg["env"]["urdfAsset"]["collapseFixedJoints"]
-        asset_options.flip_visual_attachments = self.cfg["env"]["urdfAsset"]["collapseFixedJoints"]
+        asset_options.replace_cylinder_with_capsule = self.cfg["env"]["urdfAsset"]["replace_cylinder_with_capsule"]
+        asset_options.flip_visual_attachments = self.cfg["env"]["urdfAsset"]["flip_visual_attachments"]
         asset_options.fix_base_link = self.cfg["env"]["urdfAsset"]["fixBaseLink"]
         asset_options.density = self.cfg["env"]["urdfAsset"]["density"]
         asset_options.angular_damping = self.cfg["env"]["urdfAsset"]["angular_damping"]
@@ -291,6 +289,33 @@ class KickEnv(BezEnv):
 
             bez_idx = self.gym.get_actor_index(env_ptr, bez_handle, gymapi.DOMAIN_SIM)
             self.bez_indices.append(bez_idx)
+
+            # debugging
+            # name = self.gym.get_actor_name(env_ptr, bez_handle)
+            #
+            # body_names = self.gym.get_actor_rigid_body_names(env_ptr, bez_handle)
+            # body_dict = self.gym.get_actor_rigid_body_dict(env_ptr, bez_handle)
+            #
+            # joint_names = self.gym.get_actor_joint_names(env_ptr, bez_handle)
+            # joint_dict = self.gym.get_actor_joint_dict(env_ptr, bez_handle)
+            #
+            # dof_names = self.gym.get_actor_dof_names(env_ptr, bez_handle)
+            # dof_dict = self.gym.get_actor_dof_dict(env_ptr, bez_handle)
+            #
+            # print()
+            # print("===== Actor: %s =======================================" % name)
+            #
+            # print("\nBodies")
+            # print(body_names)
+            # print(body_dict)
+            #
+            # print("\nJoints")
+            # print(joint_names)
+            # print(joint_dict)
+            #
+            # print("\n Degrees Of Freedom (DOFs)")
+            # print(dof_names)
+            # print(dof_dict)
 
             ball_handle = self.gym.create_actor(env_ptr, ball_asset, start_pose_ball, "ball", i, 0,
                                                 0)
@@ -407,8 +432,8 @@ class KickEnv(BezEnv):
 
     def feet(self):
         """
-        TODO Should take force vector and split it between 9 states :
-
+        Checks if 4 corners of the each feet are in contact with ground
+        Indicies for looking from above on the feet plates:
           Left         Right
         4-------5    0-------1
         |   ^   |    |   ^   |      ^
@@ -417,14 +442,14 @@ class KickEnv(BezEnv):
         6-------7    2-------3
         :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
         """
-        forces = torch.tensor([self.num_envs*[[-1.] * self.feet_dim]], device=self.device) # right xyz, left xyz
-        right_foot = self.contact_forces[..., 18, 0:3]
-        left_foot = self.contact_forces[..., 10, 0:3]
+        forces = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)  # nx8
+        ones = torch.ones_like(forces)
+        left_pts = torch.linalg.norm(self.left_contact_forces.T, dim=0).T  # nx4
+        right_pts = torch.linalg.norm(self.right_contact_forces.T, dim=0).T  # nx4
+        pts = torch.cat((left_pts, right_pts), 1)  # nx8
+        location = torch.where(pts > 1.0, ones, forces)
 
-        # for i in range(forces):
-        #     if right_foot
-
-        return np.array(locations)
+        return location
 
     def compute_reward(self, actions):
         self.rew_buf[:], self.reset_buf[:] = compute_bez_reward(
@@ -451,22 +476,21 @@ class KickEnv(BezEnv):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
-        right_pts = self.contact_forces[..., 18, 0:3]
-        left_pts = self.contact_forces[..., 10, 0:3]
-        print('right_pts: ', torch.round(right_pts))
-        print('left_pts: ', torch.round(left_pts))
+        # print(self.dof_pos_bez.shape)
+        # print(self.dof_vel_bez.shape)
+        # print(self.imu().shape)
+        # print(self.off_orn().shape)
+        # print('feet: ', self.feet().shape)
+        # print('ball_init: ',self.ball_init.shape, self.ball_init)
         self.obs_buf[:] = compute_bez_observations(
-            # tensors
-            self.dof_pos_bez,
-            self.root_vel_bez,
-            self.root_ang_bez,
-            self.root_pos_bez,
-            self.root_orient_bez,
-            self.root_pos_ball,
-            self.goal,
-            self.actions
-
-        )
+                # tensors
+                self.dof_pos_bez,  # 18
+                self.dof_vel_bez,  # 18
+                self.imu(),  # 6
+                self.off_orn(),  # 2
+                self.feet(),  # 8
+                self.ball_init  # 2
+            )
 
     def reset(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
@@ -546,7 +570,7 @@ def compute_bez_reward(
     vel_reward = 0.05 * torch.linalg.norm(imu_ang_bez, dim=1)
     pos_reward = 0.05 * torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
     distance_to_height = DESIRED_HEIGHT - root_pos_bez[..., 2]
-    distance_kicked = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init[..., 0:2]), dim=1)
+    distance_kicked = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init), dim=1)
     # print('here ',vel_reward.shape,pos_reward.shape,distance_to_height.shape,ball_velocity_forward_reward.shape,
     # velocity_forward_reward.shape)
 
@@ -569,7 +593,6 @@ def compute_bez_reward(
     # Reset
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
-
     # Fall
     # if root_pos_bez[..., 2] < 0.22:
     #     print('fall')
@@ -615,22 +638,18 @@ def compute_bez_reward(
 
 @torch.jit.script
 def compute_bez_observations(dof_pos_bez: Tensor,
-                             imu_lin_bez: Tensor,
-                             imu_ang_bez: Tensor,
-                             root_pos_bez: Tensor,
-                             root_orient_bez: Tensor,
-                             root_pos_ball: Tensor,
-                             ball_init: Tensor,
-                             actions: Tensor
+                             dof_vel_bez: Tensor,  # 18
+                             imu: Tensor,  # 6
+                             off_orn: Tensor,  # 2
+                             feet: Tensor,  # 8
+                             ball_init: Tensor  # 2
                              ) -> Tensor:
     obs = torch.cat((dof_pos_bez,
-                     imu_lin_bez,
-                     imu_ang_bez,
-                     root_pos_bez,
-                     root_orient_bez,
-                     root_pos_ball,
-                     ball_init,
-                     actions
+                     dof_vel_bez,  # 18
+                     imu,  # 6
+                     off_orn,  # 2
+                     feet,  # 8
+                     ball_init  # 2
                      ), dim=-1)
 
     return obs

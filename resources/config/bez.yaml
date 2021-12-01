@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 1 # 10 4096
+  numEnvs: 2 # 10 4096
   envSpacing: 1 # [m]
 
   plane:
@@ -9,8 +9,8 @@ env:
     restitution: 0.00  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.29 ] # xyz [m] 0.37 for default or 0.29 for ready
-    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
+    pos: [ 0.0, 0.0, 0.37 ] # xyz [m] 0.37 for default or 0.29 for ready
+    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
@@ -68,8 +68,8 @@ env:
     head_motor_1: 0.0 # [rad]
 
   urdfAsset:
-    collapseFixedJoints: True
-    fixBaseLink: false
+    collapseFixedJoints: False
+    fixBaseLink: False
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
     density: 0.001
