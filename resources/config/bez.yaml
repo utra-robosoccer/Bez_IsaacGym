@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 2 # 10 4096
+  numEnvs: 4096 # 10 4096
   envSpacing: 1 # [m]
 
   plane:
@@ -9,7 +9,7 @@ env:
     restitution: 0.00  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.37 ] # xyz [m] 0.37 for default or 0.29 for ready
+    pos: [ 0.0, 0.0, 0.29 ] # xyz [m] 0.37 for default or 0.29 for ready
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
@@ -94,7 +94,7 @@ env:
     dofVelocityScale: 0.05
 
     # episode length in seconds
-    episodeLength_s: 50
+    episodeLength_s: 25
 
   # viewer cam:
   viewer:

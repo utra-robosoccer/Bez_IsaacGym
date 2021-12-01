@@ -574,13 +574,13 @@ def compute_bez_reward(
     # print('here ',vel_reward.shape,pos_reward.shape,distance_to_height.shape,ball_velocity_forward_reward.shape,
     # velocity_forward_reward.shape)
 
-    #  0.1 * ball_velocity_forward_reward - distance_to_height - vel_reward - pos_reward
+    #  0.2 * ball_velocity_forward_reward - distance_to_height - vel_reward - pos_reward
     vel_pos_reward = torch.sub(vel_reward, pos_reward)
     height_vel_pos_reward = torch.sub(distance_to_height, vel_pos_reward)
-    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.1)
+    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.2)
     ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled, height_vel_pos_reward)
 
-    # 0.1 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height
+    # 0.2 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height
     velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.05)
     vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
     ball_vel_height_reward = torch.add(ball_velocity_forward_reward_scaled, vel_height_reward)
@@ -598,7 +598,7 @@ def compute_bez_reward(
     #     print('fall')
 
     reset = torch.where(root_pos_bez[..., 2] < 0.22, ones, reset)
-    reward = torch.where(root_pos_bez[..., 2] < 0.22, torch.ones_like(reward) * -2.0, reward)
+    reward = torch.where(root_pos_bez[..., 2] < 0.22, torch.ones_like(reward) * -1.0, reward)
 
     # Close to the Goal
     # if torch.linalg.norm(root_pos_ball[..., 0:2] - goal) < 0.05:
@@ -608,7 +608,7 @@ def compute_bez_reward(
     reset = torch.where(distance_to_goal_norm < 0.05, ones,
                         reset)
     reward = torch.where(distance_to_goal_norm < 0.05,
-                         torch.ones_like(reward) * 1000,
+                         torch.ones_like(reward) * 10000,
                          reward)
 
     # Out of Bound
