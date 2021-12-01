@@ -387,11 +387,11 @@ class KickEnv(BezEnv):
         # print('here')
         # print('rot: ', rot_mat.shape, rot_mat)
         # print('lin: ', lin_acc.shape, lin_acc)
-        # print('orient: ', self.root_orient_bez.shape, self.root_orient_bez)
-        lin_acc_transform = torch.zeros_like(lin_acc)
-        for i in range(self.num_envs):
-            lin_acc_transform[i] = torch.matmul(rot_mat[i], lin_acc[i])
+        # print('lin_acc_transform: ', lin_acc_transform.shape, lin_acc_transform)
+        lin_acc_transform = torch.matmul(rot_mat, lin_acc.reshape((self.num_envs, -1, 1))).reshape(
+            (self.num_envs, -1,))  # nx3x3 * n*3*1
         ang_vel = self.root_ang_bez
+
         self.prev_lin_vel = lin_vel
 
         lin_acc_clipped = torch.clamp(lin_acc_transform, -self.imu_max_lin_acc, self.imu_max_lin_acc)
@@ -411,22 +411,33 @@ class KickEnv(BezEnv):
         # print('orient: ', self.root_orient_bez.shape, self.root_orient_bez)
 
         vec = torch.zeros(self.num_envs, 2, device=self.device)
-        for i in range(self.num_envs):
-            x = self.root_orient_bez[i, 0]
-            y = self.root_orient_bez[i, 1]
-            z = self.root_orient_bez[i, 2]
-            w = self.root_orient_bez[i, 3]
-            yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y ** 2 + z ** 2))
-            d2_vect = torch.tensor([math.cos(yaw), math.sin(yaw)], device=self.device).to(dtype=torch.float32)
-            cos = torch.dot(d2_vect, distance_unit_vec[i])
-            distance_unit_vec_3d = torch.tensor([distance_unit_vec[i][0], distance_unit_vec[i][1], 0],
-                                                device=self.device)
-
-            d2_vect_3d = torch.tensor([d2_vect[0], d2_vect[1], 0], device=self.device)
-            sin = torch.linalg.norm(torch.cross(distance_unit_vec_3d, d2_vect_3d))
-            vec[i] = torch.tensor([cos, sin], device=self.device)
-            unit_vectors = torch.tensor([[0, 1], [-1, 0]], device=self.device).to(dtype=torch.float32)
-            vec[i] = torch.matmul(unit_vectors, vec[i])
+        x = self.root_orient_bez[..., 0]
+        y = self.root_orient_bez[..., 1]
+        z = self.root_orient_bez[..., 2]
+        w = self.root_orient_bez[..., 3]
+        # yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y ** 2 + z ** 2))
+        wz = torch.mul(w, z)
+        xy = torch.mul(x, y)
+        yy = torch.mul(y, y)
+        zz = torch.mul(z, z)
+        wz_xy = torch.add(wz, xy)
+        wz_xy_2 = torch.mul(2, wz_xy)
+        yy_zz = torch.add(yy, zz)
+        yy_zz_2 = torch.mul(2, yy_zz)
+        yy_zz_2_1 = torch.sub(1, yy_zz_2)
+        yaw = torch.atan2(wz_xy_2, yy_zz_2_1)
+        cos = torch.cos(yaw)
+        sin = torch.sin(yaw)
+        d2_vect = torch.cat((cos.reshape((-1, 1)), sin.reshape((-1, 1))), dim=-1)
+        cos = torch.sum(d2_vect * distance_unit_vec, dim=-1)
+        pad = torch.tensor([0], device=self.device)
+        distance_unit_vec_3d = torch.nn.functional.pad(input=distance_unit_vec, pad=(0, 1, 0, 0), mode='constant',
+                                                       value=0)
+        d2_vect_3d = torch.nn.functional.pad(input=d2_vect, pad=(0, 1, 0, 0), mode='constant',
+                                             value=0)
+        sin = torch.linalg.norm(torch.cross(distance_unit_vec_3d, d2_vect_3d, dim=1), dim=1)
+        vec = torch.cat((sin.reshape((-1, 1)), -cos.reshape((-1, 1))), dim=-1)
+        # print('vec: ', vec.shape, vec)
 
         return vec
 
@@ -482,15 +493,16 @@ class KickEnv(BezEnv):
         # print(self.off_orn().shape)
         # print('feet: ', self.feet().shape)
         # print('ball_init: ',self.ball_init.shape, self.ball_init)
+        self.imu()
         self.obs_buf[:] = compute_bez_observations(
-                # tensors
-                self.dof_pos_bez,  # 18
-                self.dof_vel_bez,  # 18
-                self.imu(),  # 6
-                self.off_orn(),  # 2
-                self.feet(),  # 8
-                self.ball_init  # 2
-            )
+            # tensors
+            self.dof_pos_bez,  # 18
+            self.dof_vel_bez,  # 18
+            self.imu(),  # 6
+            self.off_orn(),  # 2
+            self.feet(),  # 8
+            self.ball_init  # 2
+        )
 
     def reset(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
@@ -546,23 +558,13 @@ def compute_bez_reward(
     distance_to_ball_norm = torch.reshape(torch.linalg.norm(distance_to_ball, dim=1), (-1, 1))
     distance_unit_vec = torch.div(distance_to_ball, distance_to_ball_norm)  # 2xn / nx1 = nx2
 
-    velocity_forward_reward = torch.zeros_like(reset_buf)
-    for i in range(len(distance_to_ball_norm)):
-        velocity_forward_reward[i] = \
-            torch.mm(torch.t(torch.reshape(distance_unit_vec[i], (-1, 1))),
-                     torch.reshape(imu_lin_bez[i, 0:2], (-1, 1)))[
-                0, 0]
+    velocity_forward_reward = torch.sum(distance_unit_vec * imu_lin_bez[..., 0:2], dim=-1)
 
     distance_to_goal = torch.sub(goal, root_pos_ball[..., 0:2])
     distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
     distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
 
-    ball_velocity_forward_reward = torch.zeros_like(reset_buf)
-    for i in range(len(distance_to_ball_norm)):
-        ball_velocity_forward_reward[i] = \
-            torch.mm(torch.t(torch.reshape(distance_unit_vec[i], (-1, 1))),
-                     torch.reshape(root_vel_ball[i, 0:2], (-1, 1)))[
-                0, 0]
+    ball_velocity_forward_reward = torch.sum(distance_unit_vec * root_vel_ball[..., 0:2], dim=-1)
 
     DESIRED_HEIGHT = 0.27  # seems arbitrary
 
