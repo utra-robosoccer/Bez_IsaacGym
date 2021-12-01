@@ -4,13 +4,13 @@ env:
   envSpacing: 1 # [m]
 
   plane:
-    staticFriction: 2  # [-]
-    dynamicFriction: 2 # [-]
-    restitution: 0.001        # [-]
+    staticFriction: 1  # [-]
+    dynamicFriction: 1 # [-]
+    restitution: 0.00  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
-    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0 -707 0 -707 for flat belly
+    pos: [ 0.0, 0.0, 0.29 ] # xyz [m] 0.37 for default or 0.29 for ready
+    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
@@ -68,7 +68,7 @@ env:
     head_motor_1: 0.0 # [rad]
 
   urdfAsset:
-    collapseFixedJoints: True
+    collapseFixedJoints: False
     fixBaseLink: False
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
@@ -94,7 +94,7 @@ env:
     dofVelocityScale: 0.05
 
     # episode length in seconds
-    episodeLength_s: 50
+    episodeLength_s: 25
 
   # viewer cam:
   viewer:
