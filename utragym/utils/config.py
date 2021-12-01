@@ -58,9 +58,9 @@ def set_seed(seed, torch_deterministic=False):
 def retrieve_cfg(args, use_rlg_config=False):
     if use_rlg_config:
         if args.task == "GoalieEnv":
-            return os.path.join(args.logdir, "GoalieEnv"), "resources/config/rlg/rlg_bez_goalie.yaml", "resources/config/bez.yaml"
+            return os.path.join(args.logdir, "GoalieEnv"), "resources/config/rlg/rlg_bez_goalie.yaml", "resources/config/bez_goalie.yaml"
         elif args.task == "KickEnv":
-            return os.path.join(args.logdir, "KickEnv"), "rl-isaac-gym/resources/config/rlg/rlg_bez_kick.yaml", "rl-isaac-gym/resources/config/bez.yaml"
+            return os.path.join(args.logdir, "KickEnv"), "resources/config/rlg/rlg_bez_kick.yaml", "resources/config/bez.yaml"
         else:
             warn_task_name()
     else:
