@@ -9,7 +9,7 @@ env:
     restitution: 0.00  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.29 ] # xyz [m] 0.37 for default or 0.29 for ready
+    pos: [ 0.0, 0.0, 0.33 ] # xyz [m] 0.37 for default or 0.33 for ready
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
@@ -77,7 +77,7 @@ env:
     linear_damping: 0.0
     thickness: 0.01
     disable_gravity: False
-    armature: 0.01
+    armature: 0.001 # 0.001 interesting
     defaultDofDriveMode: 1 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
 
 
@@ -94,7 +94,7 @@ env:
     dofVelocityScale: 0.05
 
     # episode length in seconds
-    episodeLength_s: 25
+    episodeLength_s: 10
 
   # viewer cam:
   viewer:
@@ -116,12 +116,12 @@ sim:
   physx:
     num_threads: 4
     solver_type: 1  # 0: pgs, 1: tgs
-    num_position_iterations: 4
+    num_position_iterations: 8
     num_velocity_iterations: 1
-    contact_offset: 0.002
-    rest_offset: 0.0
+    contact_offset: 0.02
+    rest_offset: 0.00
     bounce_threshold_velocity: 0.2
-    max_depenetration_velocity: 1000.0
+    max_depenetration_velocity: 10.0
     use_gpu_pipeline: True
 
 task:

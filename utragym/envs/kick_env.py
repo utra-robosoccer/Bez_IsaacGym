@@ -510,7 +510,7 @@ class KickEnv(BezEnv):
             self.apply_randomizations(self.randomization_params)
 
         positions_offset = torch_rand_float(0, 1, (len(env_ids), self.num_dof), device=self.device)
-        velocities = torch_rand_float(-1, 0, (len(env_ids), self.num_dof), device=self.device)
+        velocities = torch_rand_float(0, 0, (len(env_ids), self.num_dof), device=self.device)
 
         self.dof_pos_bez[env_ids] = self.default_dof_pos[env_ids]  # * positions_offset
         self.dof_vel_bez[env_ids] = velocities
@@ -522,10 +522,15 @@ class KickEnv(BezEnv):
                                                      gymtorch.unwrap_tensor(self.initial_root_states),
                                                      gymtorch.unwrap_tensor(bez_indices), len(bez_indices))
 
+        self.gym.set_dof_position_target_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(self.default_dof_pos),
+                                                        gymtorch.unwrap_tensor(self.bez_indices.to(dtype=torch.int32)),
+                                                        len(self.bez_indices.to(dtype=torch.int32)))
+
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(self.bez_indices.to(dtype=torch.int32)),
-                                              len(env_ids_int32))
+                                              len(self.bez_indices.to(dtype=torch.int32)))
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
