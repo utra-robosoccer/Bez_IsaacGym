@@ -220,7 +220,7 @@ class KickEnv(BezEnv):
         asset_options.armature = self.cfg["env"]["urdfAsset"]["armature"]
         asset_options.thickness = self.cfg["env"]["urdfAsset"]["thickness"]
         asset_options.disable_gravity = self.cfg["env"]["urdfAsset"]["disable_gravity"]
-
+        # asset_options.use_physx_armature = True
         bez_asset = self.gym.load_asset(self.sim, asset_root, asset_file_bez, asset_options)
         self.num_dof = self.gym.get_asset_dof_count(bez_asset)
         self.num_bodies = self.gym.get_asset_rigid_body_count(bez_asset)
@@ -254,7 +254,7 @@ class KickEnv(BezEnv):
         asset_options_ball = gymapi.AssetOptions()
         asset_options_ball.default_dof_drive_mode = 0
         asset_options_ball.armature = self.cfg["env"]["urdfAsset"]["armature"]
-
+        # asset_options_ball.use_physx_armature = True
         ball_asset = self.gym.load_asset(self.sim, asset_root_ball, asset_file_ball, asset_options_ball)
 
         start_pose_ball = gymapi.Transform()
@@ -443,6 +443,7 @@ class KickEnv(BezEnv):
 
     def feet(self):
         """
+        TODO debug weird behavior
         Checks if 4 corners of the each feet are in contact with ground
         Indicies for looking from above on the feet plates:
           Left         Right
@@ -493,7 +494,10 @@ class KickEnv(BezEnv):
         # print(self.off_orn().shape)
         # print('feet: ', self.feet().shape)
         # print('ball_init: ',self.ball_init.shape, self.ball_init)
-        self.imu()
+        # temp = self.gym.acquire_dof_force_tensor(self.sim)
+        # self.gym.refresh_dof_force_tensor(self.sim)
+        # temp = gymtorch.wrap_tensor(temp)
+        # print(torch.round(temp))
         self.obs_buf[:] = compute_bez_observations(
             # tensors
             self.dof_pos_bez,  # 18
@@ -584,7 +588,7 @@ def compute_bez_reward(
     #  0.2 * ball_velocity_forward_reward - distance_to_height - vel_reward - pos_reward
     vel_pos_reward = torch.sub(vel_reward, pos_reward)
     height_vel_pos_reward = torch.sub(distance_to_height, vel_pos_reward)
-    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.2)
+    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 1)
     ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled, height_vel_pos_reward)
 
     # 0.2 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height

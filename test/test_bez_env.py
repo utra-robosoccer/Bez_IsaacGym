@@ -179,7 +179,6 @@ class TestBezEnv(unittest.TestCase):
                         current_dof = (current_dof + 1) % 18
                         anim_state = ANIM_SEEK_LOWER
                 self.env.step(action)
-
             # render the env
             self.env.render()
 

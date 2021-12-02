@@ -22,8 +22,8 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 100 # [N*m/rad]
-    damping: 0.0    # [N*m*s/rad]
+    stiffness: 85 # [N*m/rad] maybe 2.5
+    damping: 2.0    # [N*m*s/rad]
     actionScale: 0.5 # ?
     controlFrequencyInv: 1 # 60 Hz
 
@@ -69,7 +69,7 @@ env:
 
   urdfAsset:
     collapseFixedJoints: False
-    fixBaseLink: False
+    fixBaseLink: false
     replace_cylinder_with_capsule: False
     flip_visual_attachments: False
     density: 0.001
@@ -77,7 +77,7 @@ env:
     linear_damping: 0.0
     thickness: 0.01
     disable_gravity: False
-    armature: 0.001 # 0.001 interesting
+    armature: 0.01 # 0.001 interesting
     defaultDofDriveMode: 1 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
 
 
@@ -94,7 +94,7 @@ env:
     dofVelocityScale: 0.05
 
     # episode length in seconds
-    episodeLength_s: 10
+    episodeLength_s: 15
 
   # viewer cam:
   viewer:
@@ -104,7 +104,7 @@ env:
 
   asset:
     assetRoot: resources/assets
-    assetFileNameBez: bez/model/soccerbot_box.urdf
+    assetFileNameBez: bez/model/soccerbot_box.urdf # soccerbot_box_no_cleats soccerbot_box
     assetFileNameBall: objects/ball.urdf
 
 
@@ -116,12 +116,13 @@ sim:
   physx:
     num_threads: 4
     solver_type: 1  # 0: pgs, 1: tgs
-    num_position_iterations: 8
+    num_position_iterations: 4
     num_velocity_iterations: 1
     contact_offset: 0.02
     rest_offset: 0.00
     bounce_threshold_velocity: 0.2
     max_depenetration_velocity: 10.0
+    default_buffer_size_multiplier: 10.0
     use_gpu_pipeline: True
 
 task:
