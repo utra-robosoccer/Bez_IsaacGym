@@ -349,7 +349,7 @@ class KickEnv(BezEnv):
         # implement pre-physics simulation code here
         #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
-
+        # self.actions[:,0:2] = 0
         # computed_torque = self.Kp*(self.actions-self.dof_pos)
         # computed_torque -= self.Kd*(self.actions-self.dof_vel)
         # applied_torque = saturate(
@@ -361,7 +361,7 @@ class KickEnv(BezEnv):
         # action[0][2] = -10#self.Kp*(3-self.dof_pos[0][2])-self.Kd*(self.dof_vel[0][2])#applied_torque[0][2]
         # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(action))
         # self.actions[0][2] = 10
-        targets = self.actions + self.default_dof_pos
+        targets = self.actions #+ self.default_dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
     def post_physics_step(self):
@@ -534,7 +534,7 @@ class KickEnv(BezEnv):
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(self.bez_indices.to(dtype=torch.int32)),
-                                              len(self.bez_indices.to(dtype=torch.int32)))
+                                              len(self.bez_indices.to(dtype=torch.int32))) # env_ids_int32 self.bez_indices.to(dtype=torch.int32)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0

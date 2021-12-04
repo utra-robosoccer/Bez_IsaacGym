@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 # utragym
+
 from isaacgym import gymutil, gymapi
 from isaacgym.torch_utils import torch_rand_float
+from external.geometry.src.soccer_geometry.transformation import Transformation
+from external.pycontrol.src.soccer_pycontrol import soccerbot_controller
 from utragym.utils.config import parse_sim_params
 from utragym.utils import *
 from utragym.envs import KickEnv
@@ -13,6 +16,7 @@ import yaml
 import unittest
 import sys
 from random import randint
+
 
 
 class TestBezEnv(unittest.TestCase):
@@ -181,6 +185,24 @@ class TestBezEnv(unittest.TestCase):
                 self.env.step(action)
             # render the env
             self.env.render()
+
+    """
+    Walk environment test
+    """
+
+    def test_walk_agent(self):
+
+        self.walker = soccerbot_controller.SoccerbotController(self.env, 0)
+        self.walker.ready()
+        self.walker.wait(100)
+        self.walker.setGoal(Transformation([2, 0, 0], [0, 0, 0, 1]))
+        # check reset
+        for step_num in range(self.sim_length):
+            # self.walker.soccerbot.robot_path.show()
+            self.walker.run()
+
+            # render the env
+
 
 
 if __name__ == '__main__':

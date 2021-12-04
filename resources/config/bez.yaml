@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 4096 # 10 4096
+  numEnvs: 1 # 10 4096
   envSpacing: 1 # [m]
 
   plane:
@@ -22,8 +22,8 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 85 # [N*m/rad] maybe 2.5
-    damping: 2.0    # [N*m*s/rad]
+    stiffness: 8500 # [N*m/rad] maybe 2.5
+    damping: 0    # [N*m*s/rad]
     actionScale: 0.5 # ?
     controlFrequencyInv: 1 # 60 Hz
 
@@ -118,7 +118,7 @@ sim:
     solver_type: 1  # 0: pgs, 1: tgs
     num_position_iterations: 4
     num_velocity_iterations: 1
-    contact_offset: 0.02
+    contact_offset: 0.002 # set to 0.02 makes it run 2 times slower
     rest_offset: 0.00
     bounce_threshold_velocity: 0.2
     max_depenetration_velocity: 10.0
