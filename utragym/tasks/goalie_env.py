@@ -3,7 +3,7 @@ import os
 import time
 
 from utragym.utils.torch_jit_utils import *
-from utragym.envs.base.bez_env import BezEnv
+from utragym.tasks.base.bez_env import BezEnv
 from isaacgym import gymtorch
 from isaacgym import gymapi
 

@@ -4,11 +4,13 @@
 
 from isaacgym import gymutil, gymapi
 from isaacgym.torch_utils import torch_rand_float
+
 from external.geometry.src.soccer_geometry.transformation import Transformation
 from external.pycontrol.src.soccer_pycontrol import soccerbot_controller
-from utragym.utils.config import parse_sim_params
+from external.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
 from utragym.utils import *
-from utragym.envs import KickEnv
+from utragym.utils.utils import parse_sim_params
+from utragym.tasks.kick_env import KickEnv
 # python
 import torch
 import os
@@ -18,17 +20,15 @@ import sys
 from random import randint
 
 
-
 class TestBezEnv(unittest.TestCase):
     """Test the Utra gym environment."""
 
     def setUp(self) -> None:
-        # load parameters
-        with open(os.path.join(os.getcwd(), 'resources/config/bez.yaml'), 'r') as f:
-            cfg = yaml.load(f, Loader=yaml.SafeLoader)
 
+        with open(os.path.join(os.getcwd(), 'cfg/task/bez_kick_test.yaml'), 'r') as f:
+            cfg = yaml.load(f, Loader=yaml.SafeLoader)
         # load parameters
-        with open(os.path.join(os.getcwd(), 'resources/config/rlg/rlg_bez_kick.yaml'), 'r') as f:
+        with open(os.path.join(os.getcwd(), 'cfg/train/bez_kickPPO.yaml'), 'r') as f:
             cfg_train = yaml.load(f, Loader=yaml.SafeLoader)
         # remove file name from system arguments
         sys.argv.pop()
@@ -47,7 +47,7 @@ class TestBezEnv(unittest.TestCase):
             # sets whether to run GUI for visualization or not.
             {"name": "--headless", "action": "store_true", "default": False,
              "help": "Force display off at all times"},
-            # sets the task type: that is implementation language
+            # sets the tasks type: that is implementation language
             {"name": "--task_type", "type": str, "default": "Python",
              "help": "Choose Python or C++"},
             # sets the device for the environment
@@ -67,7 +67,8 @@ class TestBezEnv(unittest.TestCase):
         sim_params = parse_sim_params(args, cfg, cfg_train)
 
         # create environment
-        self.env = KickEnv(cfg=cfg, sim_params=sim_params, physics_engine=args.physics_engine, device_type="cuda", device_id=args.compute_device_id, headless=args.headless)
+        self.env = KickEnv(cfg=cfg, sim_device=args.sim_device,
+                           graphics_device_id=args.graphics_device_id, headless=args.headless)
 
         # Testing parameter
         self.sim_length = 30000
@@ -86,7 +87,7 @@ class TestBezEnv(unittest.TestCase):
             if step_num % self.reset_length == 0:
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
-                    self.env.reset(env_ids)
+                    self.env.reset_idx(env_ids)
 
             # render the env
             self.env.render()
@@ -104,7 +105,8 @@ class TestBezEnv(unittest.TestCase):
             if step_num % self.reset_length == 0:
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
-                    self.env.reset(env_ids)
+                    self.env.reset_idx(env_ids)
+
             else:
                 action = torch.zeros(self.env.actions.size(), dtype=torch.float, device=self.env.device)
                 self.env.step(action)
@@ -120,14 +122,14 @@ class TestBezEnv(unittest.TestCase):
     def test_random_action_agent(self):
 
         # check reset
-        for step_num in range(1,self.sim_length):
+        for step_num in range(1, self.sim_length):
 
             # reset every certain number of steps
             if step_num % self.reset_length == 0:
                 print(step_num, self.reset_length)
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
-                    self.env.reset(env_ids)
+                    self.env.reset_idx(env_ids)
             else:
                 action = randint(-3, 3) * torch.rand(self.env.actions.size(), dtype=torch.float, device=self.env.device)
                 self.env.step(action)
@@ -158,7 +160,7 @@ class TestBezEnv(unittest.TestCase):
 
                 env_ids = self.env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
                 if len(env_ids) > 0:
-                    self.env.reset(env_ids)
+                    self.env.reset_idx(env_ids)
             else:
                 # animate the dofs
                 speed = 3
@@ -203,7 +205,21 @@ class TestBezEnv(unittest.TestCase):
 
             # render the env
 
+    """
+    Trajectory environment test
+    """
 
+    def test_trajectory_agent(self):
+        trajectory_class = SoccerTrajectoryClass(self.env, 0)
+        self.walker = soccerbot_controller.SoccerbotController(self.env, 0)
+        # self.walker.ready()
+        self.walker.wait(100)
+        # check reset
+        for step_num in range(self.sim_length):
+            # self.walker.soccerbot.robot_path.show()
 
+            trajectory_class.run_trajectory("rightkick")
+
+            # render the env
 if __name__ == '__main__':
     unittest.main()
