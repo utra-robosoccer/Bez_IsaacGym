@@ -2,8 +2,6 @@
 Submodule contarining all the environments and registers them.
 """
 
-# from utragym.tasks.kick_env import KickEnv
-# from utragym.tasks.cartpole import Cartpole
 from .kick_env import KickEnv
 from .cartpole import Cartpole
 

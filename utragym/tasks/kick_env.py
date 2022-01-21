@@ -4,8 +4,6 @@ import numpy as np
 import os
 import time
 
-# from utragym.utils.torch_jit_utils import *
-# from utragym.tasks.base.vec_task import VecTask
 from utils.torch_jit_utils import *
 from .base.vec_task import VecTask
 from isaacgym import gymtorch
@@ -163,7 +161,8 @@ class KickEnv(VecTask):
         # self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17, 0:3]
         # self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29, 0:3]
         self.left_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 6, 0:3]
-        self.right_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 18, 0:3]
+        self.right_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 18,
+                                        0:3]
         # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos_bez, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
@@ -190,6 +189,7 @@ class KickEnv(VecTask):
         # If randomizing, apply once immediately on startup before the fist sim step
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
+
     def _create_ground_plane(self):
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0.0, 0.0, 1.0)
@@ -354,23 +354,11 @@ class KickEnv(VecTask):
         # implement pre-physics simulation code here
         #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
-        # self.actions[:, 0:2] = 0.0 # Remove head action
-        # for i in range(18):
-        #     self.actions = torch.where(self.actions[:, i] > self.dof_pos_limits_upper[i],self.dof_pos_limits_upper[i], self.actions[:, i] )
-        #     self.actions = torch.where(self.actions[:, i] < self.dof_pos_limits_lower[i], self.dof_pos_limits_lower[i],
-        #                                self.actions[:, i])
-        # computed_torque = self.Kp*(self.actions-self.dof_pos)
-        # computed_torque -= self.Kd*(self.actions-self.dof_vel)
-        # applied_torque = saturate(
-        #     computed_torque,
-        #     lower=self.min_motor_effort,
-        #     upper=self.max_motor_effort
-        # )
-        # action = torch.zeros(applied_torque.size(), dtype=torch.float, device=self.device)
-        # action[0][2] = -10#self.Kp*(3-self.dof_pos[0][2])-self.Kd*(self.dof_vel[0][2])#applied_torque[0][2]
-        # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(action))
-        # self.actions[0][2] = 10
-        targets = self.actions  # + self.default_dof_pos
+        self.actions[..., 0:2] = 0.0  # Remove head action
+        targets = tensor_clamp(self.actions + self.default_dof_pos, self.dof_pos_limits_lower,
+                               self.dof_pos_limits_upper)
+        # targets = tensor_clamp(self.actions, self.dof_pos_limits_lower,
+        #                        self.dof_pos_limits_upper)
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
     def post_physics_step(self):
@@ -378,6 +366,7 @@ class KickEnv(VecTask):
         #    - e.g. compute reward, compute observations
 
         self.progress_buf += 1
+        self.randomize_buf += 1
 
         # Turn off for testing
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -469,7 +458,7 @@ class KickEnv(VecTask):
         # pts = torch.cat((left_pts, right_pts), 1)  # nx8
         # location = torch.where(pts > 1.0, ones, forces)
 
-        return  forces#location
+        return forces  # location
 
     def compute_reward(self, actions):
         self.rew_buf[:], self.reset_buf[:] = compute_bez_reward(
@@ -525,10 +514,11 @@ class KickEnv(VecTask):
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
 
-        positions_offset = torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)
+        positions_offset = torch_rand_float(-0.15, 0.15, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
 
-        self.dof_pos_bez[env_ids] = self.default_dof_pos[env_ids]  * positions_offset
+        self.dof_pos_bez[env_ids] = tensor_clamp(self.default_dof_pos[env_ids] + positions_offset,
+                                                 self.dof_pos_limits_lower, self.dof_pos_limits_upper)
         self.dof_vel_bez[env_ids] = velocities
 
         bez_indices = torch.unique(torch.cat([self.bez_indices[env_ids],
@@ -674,6 +664,7 @@ def compute_bez_reward(
     reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
                          reward)
     # print(reward)
+    # reset = torch.ones_like(reset_buf)
     return reward, reset
 
 
