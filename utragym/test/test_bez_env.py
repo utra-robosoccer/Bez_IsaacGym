@@ -204,7 +204,7 @@ class TestBezEnv(unittest.TestCase):
             self.walker.run()
 
             # render the env
-
+            self.env.render()
     """
     Trajectory environment test
     """
@@ -221,5 +221,6 @@ class TestBezEnv(unittest.TestCase):
             trajectory_class.run_trajectory("rightkick")
 
             # render the env
+            self.env.render()
 if __name__ == '__main__':
     unittest.main()

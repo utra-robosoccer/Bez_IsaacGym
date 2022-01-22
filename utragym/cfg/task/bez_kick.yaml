@@ -77,10 +77,10 @@ env:
   urdfAsset:
     collapseFixedJoints: False
     fixBaseLink: false
-    replace_cylinder_with_capsule: False
+    replace_cylinder_with_capsule: True
     flip_visual_attachments: False
     density: 0.001
-    angular_damping: 0.01
+    angular_damping: 0.0
     linear_damping: 0.0
     thickness: 0.01
     disable_gravity: False
@@ -111,12 +111,12 @@ env:
 
   asset:
     assetRoot: ../resources/assets
-    assetFileNameBez: bez/model/soccerbot_box_no_cleats.urdf # soccerbot_box_no_cleats soccerbot_box
+    assetFileNameBez: bez/model/soccerbot_stl.urdf # soccerbot_box_no_cleats soccerbot_box soccerbot_stl
     assetFileNameBall: objects/ball.urdf
 
 
 sim:
-  dt: 0.0166 # 1/60 s
+  dt: 0.01667 # 1/60 s
   substeps: 2
   up_axis: "z" # 0 is y, 1 is z
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -126,20 +126,20 @@ sim:
     solver_type: ${....solver_type}
     use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
     num_position_iterations: 4
-    num_velocity_iterations: 0
+    num_velocity_iterations: 1
     contact_offset: 0.02
     rest_offset: 0.0
     bounce_threshold_velocity: 0.2
-    max_depenetration_velocity: 10.0
+    max_depenetration_velocity: 100.0
     default_buffer_size_multiplier: 5.0
     max_gpu_contact_pairs: 8388608 # 8*1024*1024
     num_subscenes: ${....num_subscenes}
-    contact_collection: 2 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (default - all contacts)
+    contact_collection: 0 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (default - all contacts)
 
 
 
 task:
-  randomize: True
+  randomize: False
   randomization_params:
     frequency: 600   # Define how many environment steps between generating new randomizations
     observations:

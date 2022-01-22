@@ -38,15 +38,15 @@
       <inertia ixx="4.323e-3" ixy="5.549e-6" ixz="3.960e-5" iyy="5.198e-3" iyz="-1.509e-5" izz="3.567e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0 0 -0.052"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../meshes/torso.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/torso.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../meshes/torso.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/torso.dae" scale="1 1 1"/>
       </geometry>
       <material name="black"/>
     </visual>
@@ -58,15 +58,15 @@
       <inertia ixx="2.824e-4" ixy="0.000" ixz="0.0" iyy="2.744e-4" iyz="1.165e-05" izz="2.433e-5"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 0.0025 0"/>
       <geometry>
-        <mesh filename="../meshes/left_bicep.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_bicep.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_bicep.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_bicep.dae" scale="1 1 1"/>
       </geometry>
       <material name="white"/>
     </visual>
@@ -78,15 +78,15 @@
       <inertia ixx="0.113e-3" ixy="0.000" ixz="1e-06" iyy="0.107e-3" iyz="0.0" izz="0.012e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="-0.0055 0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 0.005 0"/>
       <geometry>
-        <mesh filename="../meshes/left_forearm.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_forearm.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_forearm.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_forearm.dae" scale="1 1 1"/>
       </geometry>
       <material name="purple"/>
     </visual>
@@ -107,42 +107,6 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="1.5" lower="0" upper="3.141592653589793" velocity="1"/>
   </joint>
-  <gazebo reference="/left_forearm">
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <transmission name="left_arm_motor_0">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_arm_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_arm_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_arm_motor_1">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_arm_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_arm_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <gazebo reference="/left_bicep">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_forearm">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/right_bicep">
     <inertial>
       <mass value="0.213e-3"/>
@@ -150,15 +114,15 @@
       <inertia ixx="2.824e-4" ixy="0.000" ixz="-0.0" iyy="2.744e-4" iyz="-1.165e-05" izz="2.433e-5"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 -0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 -0.0025 0"/>
       <geometry>
-        <mesh filename="../meshes/right_bicep.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_bicep.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_bicep.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_bicep.dae" scale="1 1 1"/>
       </geometry>
       <material name="white"/>
     </visual>
@@ -170,15 +134,15 @@
       <inertia ixx="0.113e-3" ixy="0.000" ixz="-1e-06" iyy="0.107e-3" iyz="-0.0" izz="0.012e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="-0.0055 -0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 -0.005 0"/>
       <geometry>
-        <mesh filename="../meshes/right_forearm.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_forearm.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_forearm.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_forearm.dae" scale="1 1 1"/>
       </geometry>
       <material name="purple"/>
     </visual>
@@ -199,42 +163,6 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="1.5" lower="0" upper="3.141592653589793" velocity="1"/>
   </joint>
-  <gazebo reference="/right_forearm">
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <transmission name="right_arm_motor_0">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_arm_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_arm_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_arm_motor_1">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_arm_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_arm_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <gazebo reference="/right_bicep">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_forearm">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/left_hip_side">
     <inertial>
       <mass value="9.364e-3"/>
@@ -242,15 +170,15 @@
       <inertia ixx="0.002e-3" ixy="0.000" ixz="0.000" iyy="0.005e-3" iyz="0.000" izz="0.004e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
-      <geometry>
-        <mesh filename="../meshes/left_hip_side.obj" scale="1 1 1"/>
-      </geometry>
+      <origin rpy="0  0  0" xyz="0 0.0 0.03"/>
+        <geometry>
+            <box size="0.0485 0.022 0.00005"/>
+        </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_hip_side.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_hip_side.dae" scale="1 1 1"/>
       </geometry>
       <material name="cyan"/>
     </visual>
@@ -262,15 +190,15 @@
       <inertia ixx="0.041e-3" ixy="0.000" ixz="-0.002e-3" iyy="0.118e-3" iyz="0.000" izz="0.106e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="-0.02187 0 -0.01332"/>
+      <origin rpy="0 0 0" xyz="-0.02187 0.0 -0.01332"/>
       <geometry>
-        <mesh filename="../meshes/left_hip_front.obj" scale="1 1 1"/>
+        <box size="0.083747 0.04885 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_hip_front.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_hip_front.dae" scale="1 1 1"/>
       </geometry>
       <material name="blue"/>
     </visual>
@@ -284,13 +212,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.0445"/>
       <geometry>
-        <mesh filename="../meshes/left_thigh.obj" scale="1 1 1"/>
+        <box size="0.022 0.048 0.111"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_thigh.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_thigh.dae" scale="1 1 1"/>
       </geometry>
       <material name="red"/>
     </visual>
@@ -304,13 +232,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.03385"/>
       <geometry>
-        <mesh filename="../meshes/left_calve.obj" scale="1 1 1"/>
+        <box size="0.031883 0.048 0.105683"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+      <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
       <geometry>
-        <mesh filename="../meshes/left_calve.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_calve.dae" scale="1 1 1"/>
       </geometry>
       <material name="yellow"/>
     </visual>
@@ -322,15 +250,15 @@
       <inertia ixx="0.041e-3" ixy="0.000" ixz="0.002e-3" iyy="0.118e-3" iyz="0.000" izz="0.106e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="-0.02014 0 0.01031"/>
+      <origin rpy="0 0 0" xyz="-0.02014 0.0 0.01031"/>
       <geometry>
-        <mesh filename="../meshes/left_ankle.obj" scale="1 1 1"/>
+        <box size="0.090769 0.042 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0 0 0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/left_ankle.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_ankle.dae" scale="1 1 1"/>
       </geometry>
       <material name="purple"/>
     </visual>
@@ -342,16 +270,16 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 -0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00385 0.00401 -0.020 "/>
       <geometry>
-        <mesh filename="../meshes/left_foot.obj" scale="1 1 1"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <contact_coefficients mu="100.0"/>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0  0  0"/>
+      <origin rpy="0  0  0" xyz="0  0.00802  0"/>
       <geometry>
-        <mesh filename="../meshes/left_foot.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/left_foot.dae" scale="1 1 1"/>
       </geometry>
       <material name="green"/>
     </visual>
@@ -383,7 +311,7 @@
   <joint name="left_leg_motor_3" type="revolute">
     <parent link="/left_thigh"/>
     <child link="/left_calve"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0890"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.08900"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-2.793" upper="0" velocity="1"/>
@@ -391,7 +319,7 @@
   <joint name="left_leg_motor_4" type="revolute">
     <parent link="/left_calve"/>
     <child link="/left_ankle"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="1.5707963267948966" velocity="1"/>
@@ -404,100 +332,6 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="0.7853981633974483" velocity="1"/>
   </joint>
-  <transmission name="left_leg_motor_0">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_leg_motor_1">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_leg_motor_2">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_2">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_2">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_leg_motor_3">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_3">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_3">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_leg_motor_4">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_4">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_4">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="left_leg_motor_5">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="left_leg_motor_5">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="left_leg_motor_5">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <gazebo reference="/left_hip_side">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_hip_front">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_thigh">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_calve">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_ankle">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/left_foot">
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/right_hip_side">
     <inertial>
       <mass value="9.364e-3"/>
@@ -505,15 +339,15 @@
       <inertia ixx="0.002e-3" ixy="0.000" ixz="0.000" iyy="0.005e-3" iyz="0.000" izz="0.004e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
-      <geometry>
-        <mesh filename="../meshes/right_hip_side.obj" scale="1 1 1"/>
-      </geometry>
+      <origin rpy="0  0  0" xyz="0 0 0.03"/>
+        <geometry>
+            <box size="0.0485 0.022 0.00005"/>
+        </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_hip_side.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_hip_side.dae" scale="1 1 1"/>
       </geometry>
       <material name="cyan"/>
     </visual>
@@ -527,13 +361,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02187 0 -0.01332"/>
       <geometry>
-        <mesh filename="../meshes/right_hip_front.obj" scale="1 1 1"/>
+        <box size="0.083747 0.04885 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_hip_front.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_hip_front.dae" scale="1 1 1"/>
       </geometry>
       <material name="blue"/>
     </visual>
@@ -547,13 +381,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.0445"/>
       <geometry>
-        <mesh filename="../meshes/right_thigh.obj" scale="1 1 1"/>
+        <box size="0.022 0.048 0.111"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_thigh.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_thigh.dae" scale="1 1 1"/>
       </geometry>
       <material name="red"/>
     </visual>
@@ -567,13 +401,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.03385"/>
       <geometry>
-        <mesh filename="../meshes/right_calve.obj" scale="1 1 1"/>
+        <box size="0.031883 0.048 0.105683"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+      <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
       <geometry>
-        <mesh filename="../meshes/right_calve.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_calve.dae" scale="1 1 1"/>
       </geometry>
       <material name="yellow"/>
     </visual>
@@ -587,13 +421,13 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02014 0 0.01031"/>
       <geometry>
-        <mesh filename="../meshes/right_ankle.obj" scale="1 1 1"/>
+        <box size="0.090769 0.042 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0 0 0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/right_ankle.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_ankle.dae" scale="1 1 1"/>
       </geometry>
       <material name="purple"/>
     </visual>
@@ -605,16 +439,16 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00385 -0.00401 -0.020 "/>
       <geometry>
-        <mesh filename="../meshes/right_foot.obj" scale="1 1 1"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <contact_coefficients mu="100.0"/>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0  0  0"/>
+      <origin rpy="0  0  0" xyz="0  -0.00802  0"/>
       <geometry>
-        <mesh filename="../meshes/right_foot.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/right_foot.dae" scale="1 1 1"/>
       </geometry>
       <material name="green"/>
     </visual>
@@ -646,7 +480,7 @@
   <joint name="right_leg_motor_3" type="revolute">
     <parent link="/right_thigh"/>
     <child link="/right_calve"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0890"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.089"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-2.793" upper="0" velocity="1"/>
@@ -654,7 +488,7 @@
   <joint name="right_leg_motor_4" type="revolute">
     <parent link="/right_calve"/>
     <child link="/right_ankle"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="1.5707963267948966" velocity="1"/>
@@ -667,100 +501,6 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="0.7853981633974483" velocity="1"/>
   </joint>
-  <transmission name="right_leg_motor_0">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_leg_motor_1">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_leg_motor_2">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_2">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_2">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_leg_motor_3">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_3">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_3">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_leg_motor_4">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_4">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_4">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="right_leg_motor_5">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="right_leg_motor_5">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="right_leg_motor_5">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <gazebo reference="/right_hip_side">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_hip_front">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_thigh">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_calve">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_ankle">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/right_foot">
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/neck">
     <inertial>
       <mass value="0.011294"/>
@@ -770,13 +510,13 @@
     <collision name="collision">
       <origin rpy="0  0  0" xyz="0 0 0.0165"/>
       <geometry>
-        <mesh filename="../meshes/neck.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/neck.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/neck.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/neck.dae" scale="1 1 1"/>
       </geometry>
       <material name="silver"/>
     </visual>
@@ -790,13 +530,13 @@
     <collision name="collision">
       <origin rpy="0  0  0" xyz="-0.013 0 0.025"/>
       <geometry>
-        <mesh filename="../meshes/head.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/head.dae" scale="1 1 1"/>
       </geometry>
     </collision>
     <visual name="visual">
       <origin rpy="0  0  0" xyz="0  0  0"/>
       <geometry>
-        <mesh filename="../meshes/head.obj" scale="1 1 1"/>
+        <mesh filename="../meshes/head.dae" scale="1 1 1"/>
       </geometry>
       <material name="silver"/>
     </visual>
@@ -817,38 +557,6 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="1.5" lower="-2.356194490192345" upper="2.356194490192345" velocity="1"/>
   </joint>
-  <transmission name="head_motor_0">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="head_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="head_motor_0">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <transmission name="head_motor_1">
-    <type>transmission_interface/SimpleTransmission</type>
-    <joint name="head_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-    </joint>
-    <actuator name="head_motor_1">
-      <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
-      <mechanicalReduction>1</mechanicalReduction>
-    </actuator>
-  </transmission>
-  <gazebo reference="/neck">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo reference="/head">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/imu_link">
     <inertial>
       <mass value="0.01"/>
@@ -862,31 +570,6 @@
     <origin rpy="0 0 0" xyz="0.0 0 0.000"/>
     <axis xyz="0 0 0"/>
   </joint>
-  <gazebo reference="/imu_link">
-    <gravity>true</gravity>
-    <sensor name="imu_sensor" type="imu">
-      <always_on>true</always_on>
-      <update_rate>100</update_rate>
-      <visualize>true</visualize>
-      <topic>__default_topic__</topic>
-      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
-        <topicName>imu_raw</topicName>
-        <bodyName>imu_link</bodyName>
-        <updateRateHZ>50.0</updateRateHZ>
-        <gaussianNoise>0.0</gaussianNoise>
-        <xyzOffset>0 0 0</xyzOffset>
-        <rpyOffset>0 0 0</rpyOffset>
-        <frameName>imu_link</frameName>
-      </plugin>
-      <pose>0 0 0 0 0 0</pose>
-    </sensor>
-  </gazebo>
-  <gazebo reference="/imu_link">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
   <link name="/camera">
     <inertial>
       <mass value="0.01"/>
@@ -902,70 +585,4 @@
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="0" lower="0" upper="0" velocity="0"/>
   </joint>
-  <gazebo reference="/camera">
-    <sensor name="main_camera" type="camera">
-      <always_on>1</always_on>
-      <visualize>1</visualize>
-      <update_rate>30</update_rate>
-      <camera>
-        <horizontal_fov>1.39626</horizontal_fov>
-        <image>
-          <width>640</width>
-          <height>480</height>
-          <format>R8G8B8</format>
-        </image>
-        <clip>
-          <near>0.2</near>
-          <far>10</far>
-        </clip>
-        <noise>
-          <type>gaussian</type>
-          <mean>0</mean>
-          <stddev>0.007</stddev>
-        </noise>
-      </camera>
-      <plugin filename="libgazebo_ros_camera.so" name="camera_controller">
-        <alwaysOn>true</alwaysOn>
-        <updateRate>0.0</updateRate>
-        <cameraName>camera</cameraName>
-        <imageTopicName>image_raw</imageTopicName>
-        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-        <frameName>camera_link</frameName>
-        <hackBaseline>0.07</hackBaseline>
-        <distortionK1>0.0</distortionK1>
-        <distortionK2>0.0</distortionK2>
-        <distortionK3>0.0</distortionK3>
-        <distortionT1>0.0</distortionT1>
-        <distortionT2>0.0</distortionT2>
-      </plugin>
-    </sensor>
-  </gazebo>
-  <gazebo reference="/camera">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
-  <gazebo>
-    <plugin filename="libgazebo_ros_control.so" name="gazebo_ros_control">
-      <robotNamespace>/</robotNamespace>
-      <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>
-    </plugin>
-    <plugin filename="libgazebo_ros_p3d.so" name="p3d_base_controller">
-      <alwaysOn>true</alwaysOn>
-      <updateRate>50.0</updateRate>
-      <bodyName>base_footprint</bodyName>
-      <topicName>odom_ground_truth</topicName>
-      <gaussianNoise>0.01</gaussianNoise>
-      <frameName>world</frameName>
-      <xyzOffsets>0 0 0</xyzOffsets>
-      <rpyOffsets>0 0 0</rpyOffsets>
-    </plugin>
-  </gazebo>
-  <gazebo reference="/torso">
-    <kp>1000000000000000.0</kp>
-    <kd>10000000000000.0</kd>
-    <mu1>0.2</mu1>
-    <mu2>0.2</mu2>
-  </gazebo>
 </robot>
