@@ -37,7 +37,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.052"/>
       <geometry>
-        <mesh filename="../meshes/torso.obj" scale="1 1 1"/>
+        <box size="0.130 0.145 0.152"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -50,18 +50,18 @@
   </link>
   <link name="/left_bicep">
     <inertial>
-      <mass value="0.213e-3"/>
+      <mass value="0.000213"/>
       <origin rpy="0  0  0" xyz="0.000 0.02579 -0.04955"/>
       <inertia ixx="2.824e-4" ixy="0.000" ixz="0.0" iyy="2.744e-4" iyz="1.165e-05" izz="2.433e-5"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 0.0245 -0.05001"/>
       <geometry>
-        <mesh filename="../meshes/left_bicep.obj" scale="1 1 1"/>
+        <box size="0.04 0.04776 0.123"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0 0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 0.0245 -0.05001"/>
       <geometry>
         <box size="0.04 0.04776 0.123"/>
       </geometry>
@@ -75,13 +75,13 @@
       <inertia ixx="0.113e-3" ixy="0.000" ixz="1e-06" iyy="0.107e-3" iyz="0.0" izz="0.012e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="-0.0055 0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 0.0255 -0.0600"/>
       <geometry>
-        <mesh filename="../meshes/left_forearm.obj" scale="1 1 1"/>
+        <box size="0.035 0.049 0.144"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="-0.0055 0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 0.0255 -0.0600"/>
       <geometry>
         <box size="0.035 0.049 0.144"/>
       </geometry>
@@ -147,13 +147,13 @@
       <inertia ixx="2.824e-4" ixy="0.000" ixz="-0.0" iyy="2.744e-4" iyz="-1.165e-05" izz="2.433e-5"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 -0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 -0.0255 -0.05001"/>
       <geometry>
-        <mesh filename="../meshes/right_bicep.obj" scale="1 1 1"/>
+        <box size="0.04 0.04776 0.123"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0 -0.0225 -0.05001"/>
+      <origin rpy="0  0  0" xyz="0 -0.0255 -0.05001"/>
       <geometry>
         <box size="0.04 0.04776 0.123"/>
       </geometry>
@@ -167,13 +167,13 @@
       <inertia ixx="0.113e-3" ixy="0.000" ixz="-1e-06" iyy="0.107e-3" iyz="-0.0" izz="0.012e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="-0.0055 -0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 -0.0255 -0.0600"/>
       <geometry>
-        <mesh filename="../meshes/right_forearm.obj" scale="1 1 1"/>
+        <box size="0.035 0.049 0.144"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="-0.0055 -0.0175 -0.0600"/>
+      <origin rpy="0  0  0" xyz="-0.0055 -0.0255 -0.0600"/>
       <geometry>
         <box size="0.035 0.049 0.144"/>
       </geometry>
@@ -239,15 +239,15 @@
       <inertia ixx="0.002e-3" ixy="0.000" ixz="0.000" iyy="0.005e-3" iyz="0.000" izz="0.004e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
+      <origin rpy="0  0  0" xyz="0 0 0.03"/>
       <geometry>
-        <mesh filename="../meshes/left_hip_side.obj" scale="1 1 1"/>
+        <box size="0.0485 0.022 0.00005"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
+      <origin rpy="0  0  0" xyz="0 0 0.03"/>
       <geometry>
-        <box size="0.0485 0.022 0.0039"/>
+        <box size="0.0485 0.022 0.00005"/>
       </geometry>
       <material name="cyan"/>
     </visual>
@@ -261,7 +261,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02187 0 -0.01332"/>
       <geometry>
-        <mesh filename="../meshes/left_hip_front.obj" scale="1 1 1"/>
+        <box size="0.083747 0.04885 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -281,7 +281,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.0445"/>
       <geometry>
-        <mesh filename="../meshes/left_thigh.obj" scale="1 1 1"/>
+        <box size="0.022 0.048 0.111"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -301,7 +301,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.03385"/>
       <geometry>
-        <mesh filename="../meshes/left_calve.obj" scale="1 1 1"/>
+        <box size="0.031883 0.048 0.105683"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -321,7 +321,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02014 0 0.01031"/>
       <geometry>
-        <mesh filename="../meshes/left_ankle.obj" scale="1 1 1"/>
+        <box size="0.090769 0.042 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -339,16 +339,16 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 -0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00225 0.00401 -0.0205 "/>
       <geometry>
-        <mesh filename="../meshes/left_foot.obj" scale="1 1 1"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <contact_coefficients mu="100.0"/>
     </collision>
     <visual name="visual">
-      <origin rpy="0 0 0" xyz="0.00385 -0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00225 0.00401 -0.0205 "/>
       <geometry>
-        <box size="0.09 0.07 0.03674"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <material name="green"/>
     </visual>
@@ -388,7 +388,7 @@
   <joint name="left_leg_motor_4" type="revolute">
     <parent link="/left_calve"/>
     <child link="/left_ankle"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="1.5707963267948966" velocity="1"/>
@@ -502,15 +502,15 @@
       <inertia ixx="0.002e-3" ixy="0.000" ixz="0.000" iyy="0.005e-3" iyz="0.000" izz="0.004e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
+      <origin rpy="0  0  0" xyz="0 0 0.03"/>
       <geometry>
-       <mesh filename="../meshes/right_hip_side.obj" scale="1 1 1"/>
+        <box size="0.0485 0.022 0.00005"/>
       </geometry>
     </collision>
     <visual name="visual">
-      <origin rpy="0  0  0" xyz="0 0 0.00899"/>
+      <origin rpy="0  0  0" xyz="0 0 0.03"/>
       <geometry>
-        <box size="0.0485 0.022 0.0039"/>
+        <box size="0.0485 0.022 0.00005"/>
       </geometry>
       <material name="cyan"/>
     </visual>
@@ -524,7 +524,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02187 0 -0.01332"/>
       <geometry>
-        <mesh filename="../meshes/right_hip_front.obj" scale="1 1 1"/>
+        <box size="0.083747 0.04885 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -544,7 +544,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.0445"/>
       <geometry>
-        <mesh filename="../meshes/right_thigh.obj" scale="1 1 1"/>
+        <box size="0.022 0.048 0.111"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -564,7 +564,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="0 0 -0.03385"/>
       <geometry>
-        <mesh filename="../meshes/right_calve.obj" scale="1 1 1"/>
+        <box size="0.031883 0.048 0.105683"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -584,7 +584,7 @@
     <collision name="collision">
       <origin rpy="0 0 0" xyz="-0.02014 0 0.01031"/>
       <geometry>
-        <mesh filename="../meshes/right_ankle.obj" scale="1 1 1"/>
+        <box size="0.090769 0.042 0.0506"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -602,16 +602,16 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00225 -0.00401 -0.0205 "/>
       <geometry>
-        <mesh filename="../meshes/right_foot.obj" scale="1 1 1"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <contact_coefficients mu="100.0"/>
     </collision>
     <visual name="visual">
-      <origin rpy="0 0 0" xyz="0.00385 0.00401 -0.00737 "/>
+      <origin rpy="0 0 0" xyz="0.00225 -0.00401 -0.0205 "/>
       <geometry>
-        <box size="0.09 0.07 0.03674"/>
+        <box size="0.09 0.07 0.003"/>
       </geometry>
       <material name="green"/>
     </visual>
@@ -651,7 +651,7 @@
   <joint name="right_leg_motor_4" type="revolute">
     <parent link="/right_calve"/>
     <child link="/right_ankle"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.0827"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.0865"/>
     <axis xyz="0 -1 0"/>
     <dynamics damping="0.01" friction="0.1"/>
     <limit effort="2.5" lower="-0.7853981633974483" upper="1.5707963267948966" velocity="1"/>
@@ -767,7 +767,7 @@
     <collision name="collision">
       <origin rpy="0  0  0" xyz="0 0 0.0165"/>
       <geometry>
-        <mesh filename="../meshes/neck.obj" scale="1 1 1"/>
+        <box size="0.022 0.0523 0.033"/>
       </geometry>
     </collision>
     <visual name="visual">
@@ -787,7 +787,7 @@
     <collision name="collision">
       <origin rpy="0  0  0" xyz="-0.013 0 0.025"/>
       <geometry>
-        <mesh filename="../meshes/head.obj" scale="1 1 1"/>
+        <box size="0.0712 0.094 0.0779"/>
       </geometry>
     </collision>
     <visual name="visual">

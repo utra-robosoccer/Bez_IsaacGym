@@ -6,7 +6,7 @@ physics_engine: ${..physics_engine}
 # if given will override the device setting in gym.
 env:
   numEnvs: ${resolve_default:4096,${...num_envs}} # 10 4096
-  envSpacing: 1 # [m]
+  envSpacing: 2 # [m]
   episodeLength: 1000
   clipActions: 3.9
 
@@ -111,7 +111,7 @@ env:
 
   asset:
     assetRoot: ../resources/assets
-    assetFileNameBez: bez/model/soccerbot_stl.urdf # soccerbot_box_no_cleats soccerbot_box soccerbot_stl
+    assetFileNameBez: bez/model/soccerbot_stl_sensor.urdf # soccerbot_box_no_cleats soccerbot_box soccerbot_stl
     assetFileNameBall: objects/ball.urdf
 
 
@@ -126,7 +126,7 @@ sim:
     solver_type: ${....solver_type}
     use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
     num_position_iterations: 4
-    num_velocity_iterations: 1
+    num_velocity_iterations: 1 # try 0 for fast or no ball
     contact_offset: 0.02
     rest_offset: 0.0
     bounce_threshold_velocity: 0.2
@@ -134,7 +134,7 @@ sim:
     default_buffer_size_multiplier: 5.0
     max_gpu_contact_pairs: 8388608 # 8*1024*1024
     num_subscenes: ${....num_subscenes}
-    contact_collection: 0 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (default - all contacts)
+    contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (default - all contacts)
 
 
 

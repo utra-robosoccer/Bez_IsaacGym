@@ -270,7 +270,7 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 0.00401 -0.020 "/>
+      <origin rpy="0 0 0" xyz="0.00225 0.00401 -0.0205 "/>
       <geometry>
         <box size="0.09 0.07 0.003"/>
       </geometry>
@@ -439,7 +439,7 @@
       <inertia ixx="0.006e-3" ixy="0.000" ixz="0.000" iyy="0.018e-3" iyz="0.000" izz="0.022e-3"/>
     </inertial>
     <collision name="collision">
-      <origin rpy="0 0 0" xyz="0.00385 -0.00401 -0.020 "/>
+      <origin rpy="0 0 0" xyz="0.00225 -0.00401 -0.0205 "/>
       <geometry>
         <box size="0.09 0.07 0.003"/>
       </geometry>

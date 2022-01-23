@@ -46,7 +46,7 @@ headless: False
 defaults:
   - task: Cartpole
   - train: ${task}PPO
-  - hydra/job_logging: default
+  - hydra/job_logging: disabled
 
 # set the directory where the output files get saved
 hydra:
