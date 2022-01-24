@@ -158,7 +158,7 @@ class GoalieEnv(BezEnv):
 
     def _create_envs(self, num_envs, spacing, num_per_row):
         asset_root = "../../../resources/assets"
-        asset_file = "/bez/model/soccerbot_box.urdf"
+        asset_file = "/bez/model/soccerbot_box_sensor.urdf"
 
         if "asset" in self.cfg["env"]:
             asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)

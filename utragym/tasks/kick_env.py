@@ -158,15 +158,21 @@ class KickEnv(VecTask):
                             7:10]
         self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1,
                             10:13]
-        self.prev_lin_vel = torch.tensor([0, 0, 0], device='cuda:0')
-        self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17, 0:3]
-        self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29, 0:3]
-        # self.left_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 6, 0:3]
-        # self.right_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 18,
-        #                                 0:3]
-        # self.left_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 12, 0:3]
-        # self.right_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 20,
-        #                                 0:3]
+        self.prev_lin_vel = torch.tensor(self.num_envs * [[0, 0, 0]], device='cuda:0')
+
+        # self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17,
+        # 0:3]
+        # self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[...,
+        # 25:29, 0:3]
+        self.left_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 12,
+                                        0:3]
+        self.right_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 20,
+                                         0:3]
+        # self.left_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 6,
+        # 0:3]
+        # self.right_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
+        # 3)[..., 18,0:3]
+
         # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos_bez, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
@@ -186,6 +192,7 @@ class KickEnv(VecTask):
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
             (self.num_envs, 1))
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
 
     def create_sim(self):
         self.up_axis_idx = self.set_sim_params_up_axis(self.sim_params, 'z')
@@ -207,7 +214,7 @@ class KickEnv(VecTask):
 
     def _create_envs(self, num_envs, spacing, num_per_row):
         asset_root = "../../assets"
-        asset_file_bez = "bez/model/soccerbot_box.urdf"
+        asset_file_bez = "bez/model/soccerbot_box_sensor.urdf"
         asset_file_ball = "bez/objects/ball.urdf"
 
         if "asset" in self.cfg["env"]:
@@ -395,73 +402,37 @@ class KickEnv(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids) > 0:
             self.reset_idx(env_ids)
+
         self.compute_observations()
         self.compute_reward(self.actions)
 
     def imu(self):
-        lin_vel = self.root_vel_bez
-        lin_acc = (lin_vel - self.prev_lin_vel) / (self.dt)
-        lin_acc -= self.gravity_vec
-
-        rot_mat = quaternion_to_matrix(self.root_orient_bez)
-        # print('here')
-        # print('rot: ', rot_mat.shape, rot_mat)
-        # print('lin: ', lin_acc.shape, lin_acc)
-        # print('lin_acc_transform: ', lin_acc_transform.shape, lin_acc_transform)
-        lin_acc_transform = torch.matmul(rot_mat, lin_acc.reshape((self.num_envs, -1, 1))).reshape(
-            (self.num_envs, -1,))  # nx3x3 * n*3*1
-        ang_vel = self.root_ang_bez
-
-        self.prev_lin_vel = lin_vel
-
-        lin_acc_clipped = torch.clamp(lin_acc_transform, -self.imu_max_lin_acc, self.imu_max_lin_acc)
-        ang_vel_clipped = torch.clamp(ang_vel, -self.imu_max_ang_vel, self.imu_max_ang_vel)
-        # print('here')
-        # print('lin c: ', lin_acc_clipped.shape, lin_acc_clipped)
-        # print('ang c: ', ang_vel_clipped.shape, ang_vel_clipped)
-        imu_val = torch.cat([lin_acc_clipped, ang_vel_clipped], 1)
+        imu_val, self.prev_lin_vel = compute_imu(
+            # tensors
+            self.root_orient_bez,
+            self.root_vel_bez,
+            self.root_ang_bez,
+            self.prev_lin_vel,
+            self.gravity_vec,
+            # floats
+            self.imu_max_lin_acc,
+            self.imu_max_ang_vel,
+            self.dt,
+            # int
+            self.num_envs
+        )
         return imu_val
 
     def off_orn(self):
-        distance_to_goal = torch.sub(self.goal, self.root_pos_bez[..., 0:2])
-        distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-        distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
-        # print('here')
-        # print('distance_unit_vec: ', distance_unit_vec.shape, distance_unit_vec)
-        # print('orient: ', self.root_orient_bez.shape, self.root_orient_bez)
-
-        vec = torch.zeros(self.num_envs, 2, device=self.device)
-        x = self.root_orient_bez[..., 0]
-        y = self.root_orient_bez[..., 1]
-        z = self.root_orient_bez[..., 2]
-        w = self.root_orient_bez[..., 3]
-        # yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y ** 2 + z ** 2))
-        wz = torch.mul(w, z)
-        xy = torch.mul(x, y)
-        yy = torch.mul(y, y)
-        zz = torch.mul(z, z)
-        wz_xy = torch.add(wz, xy)
-        wz_xy_2 = torch.mul(2, wz_xy)
-        yy_zz = torch.add(yy, zz)
-        yy_zz_2 = torch.mul(2, yy_zz)
-        yy_zz_2_1 = torch.sub(1, yy_zz_2)
-        yaw = torch.atan2(wz_xy_2, yy_zz_2_1)
-        cos = torch.cos(yaw)
-        sin = torch.sin(yaw)
-        d2_vect = torch.cat((cos.reshape((-1, 1)), sin.reshape((-1, 1))), dim=-1)
-        cos = torch.sum(d2_vect * distance_unit_vec, dim=-1)
-        pad = torch.tensor([0], device=self.device)
-        distance_unit_vec_3d = torch.nn.functional.pad(input=distance_unit_vec, pad=(0, 1, 0, 0), mode='constant',
-                                                       value=0)
-        d2_vect_3d = torch.nn.functional.pad(input=d2_vect, pad=(0, 1, 0, 0), mode='constant',
-                                             value=0)
-        sin = torch.linalg.norm(torch.cross(distance_unit_vec_3d, d2_vect_3d, dim=1), dim=1)
-        vec = torch.cat((sin.reshape((-1, 1)), -cos.reshape((-1, 1))), dim=-1)
-        # print('vec: ', vec.shape, vec)
-
+        vec = compute_off_orn(
+            # tensors
+            self.root_pos_bez,
+            self.root_orient_bez,
+            self.goal
+        )
         return vec
 
-    def feet(self):
+    def feet_sensors_cleats(self):
         """
         TODO debug weird behavior
         Checks if 4 corners of the each feet are in contact with ground
@@ -474,16 +445,105 @@ class KickEnv(VecTask):
         6-------7    2-------3
         :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
         """
+
         forces = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)  # nx8
         ones = torch.ones_like(forces)
-        left_pts = torch.linalg.norm(self.left_contact_forces.T, dim=0).T  # nx4
-        right_pts = torch.linalg.norm(self.right_contact_forces.T, dim=0).T  # nx4
-        pts = torch.cat((left_pts, right_pts), 1)  # nx8
-        location = torch.where(pts > 1.0, ones, forces)
-        # print("self.left_pts: ", left_pts)
-        # print("self.right_pts: ", right_pts)
+        location = compute_feet_sensors_cleats(
+            # tensors
+            self.left_contact_forces,
+            self.right_contact_forces,
+            forces,
+            ones
+        )
+
+        # print("self.left_foot_contact_forces: ", self.left_foot_contact_forces)
+        # print("self.right_foot_contact_forces: ", self.right_foot_contact_forces)
         # print('feet: ', location)
-        return location  # location forces
+        return location  # forces
+
+    def feet_sensors_no_cleats(self):
+        """
+        TODO debug weird behavior
+        Checks if 4 corners of the each feet are in contact with ground
+        Indicies for looking from above on the feet plates:
+          Left         Right
+        4-------5    0-------1
+        |   ^   |    |   ^   |      ^
+        |   |   |    |   |   |      | : forward direction
+        |       |    |       |
+        6-------7    2-------3
+        :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
+        """
+        forces = torch.tensor(self.num_envs * [[-1.] * 4], device=self.device)  # nx4
+
+        # General tensors
+        ones = torch.ones(1, device=self.device)
+        zeros = torch.zeros(1, device=self.device)
+        zero = torch.zeros(3, device=self.device)
+
+        # Possible sensor configuration
+        forces_case_1 = torch.tensor([1., -1., -1., -1.],
+                                     device=self.device)
+        forces_case_2 = torch.tensor([-1., -1., 1., -1.],
+                                     device=self.device)
+        forces_case_3 = torch.tensor([1., -1., 1., -1.],
+                                     device=self.device)
+        forces_case_5 = torch.tensor([-1., 1., -1., -1.],
+                                     device=self.device)
+        forces_case_6 = torch.tensor([-1., -1., -1., 1.],
+                                     device=self.device)
+        forces_case_7 = torch.tensor([-1., 1., -1., 1.],
+                                     device=self.device)
+        forces_case_9 = torch.tensor([1., 1., -1., -1.],
+                                     device=self.device)
+        forces_case_10 = torch.tensor([-1., -1., 1., 1.],
+                                      device=self.device)
+        forces_case_11 = torch.tensor([1., 1., 1., 1.],
+                                      device=self.device)
+        forces_case_12 = torch.tensor([-1., -1., -1., -1.], device=self.device)
+
+        left_forces = compute_feet_sensors_no_cleats(
+            # tensors
+            self.left_foot_contact_forces,
+            forces,
+            ones,
+            zeros,
+            zero,
+            forces_case_1,
+            forces_case_2,
+            forces_case_3,
+            forces_case_5,
+            forces_case_6,
+            forces_case_7,
+            forces_case_9,
+            forces_case_10,
+            forces_case_11,
+            forces_case_12
+        )
+        right_forces = compute_feet_sensors_no_cleats(
+            # tensors
+            self.right_foot_contact_forces,
+            forces,
+            ones,
+            zeros,
+            zero,
+            forces_case_1,
+            forces_case_2,
+            forces_case_3,
+            forces_case_5,
+            forces_case_6,
+            forces_case_7,
+            forces_case_9,
+            forces_case_10,
+            forces_case_11,
+            forces_case_12
+        )
+        location = torch.cat((left_forces, right_forces), 1)
+
+        # print("self.left_foot_contact_forces: ", self.left_foot_contact_forces)
+        # print("self.right_foot_contact_forces: ", self.right_foot_contact_forces)
+        # print('feet: ', location)
+        return location  # forces
 
     def compute_reward(self, actions):
         self.rew_buf[:], self.reset_buf[:] = compute_bez_reward(
@@ -500,7 +560,7 @@ class KickEnv(VecTask):
             self.ball_init,
             self.reset_buf,
             self.progress_buf,
-            self.feet(),
+            self.feet,
             # self.left_arm_contact_forces,
             # self.right_arm_contact_forces,
             # int
@@ -528,13 +588,18 @@ class KickEnv(VecTask):
         # print(torch.round(temp))
         # distance_kicked = torch.linalg.norm(torch.sub(self.root_pos_ball[..., 0:2], self.ball_init), dim=1)
         # print("distance_kicked: ", distance_kicked)
+        imu = self.imu()
+        off_orn = self.off_orn()
+        # self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
+        # self.feet = self.feet_sensors_cleats()
+        self.feet = self.feet_sensors_no_cleats()
         self.obs_buf[:] = compute_bez_observations(
             # tensors
             self.dof_pos_bez,  # 18
             self.dof_vel_bez,  # 18
-            self.imu(),  # 6
-            self.off_orn(),  # 2
-            self.feet(),  # 8
+            imu,  # 6
+            off_orn,  # 2
+            self.feet,  # 8
             self.ball_init  # 2
         )
 
@@ -583,6 +648,215 @@ class KickEnv(VecTask):
 #####################################################################
 
 @torch.jit.script
+def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
+    """
+    Convert rotations given as quaternions to rotation matrices.
+    Args:
+        quaternions: quaternions with real part first,
+            as tensor of shape (..., 4).
+    Returns:
+        Rotation matrices as tensor of shape (..., 3, 3).
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
+
+
+@torch.jit.script
+def compute_imu(
+        # tensors
+        root_orient_bez: Tensor,
+        root_vel_bez: Tensor,
+        root_ang_bez: Tensor,
+        prev_lin_vel: Tensor,
+        gravity_vec: Tensor,
+        # floats
+        imu_max_lin_acc: float,
+        imu_max_ang_vel: float,
+        dt: float,
+        # int
+        num_envs: int
+
+) -> Tuple[Tensor, Tensor]:
+    lin_acc = torch.sub(root_vel_bez, prev_lin_vel)
+    lin_acc = torch.div(lin_acc, dt)
+    lin_acc = torch.sub(lin_acc, gravity_vec)
+
+    rot_mat = quaternion_to_matrix(root_orient_bez)
+    # print('here')
+    # print('rot: ', rot_mat.shape, rot_mat)
+    # print('lin: ', lin_acc.shape, lin_acc)
+    # print('lin_acc_transform: ', lin_acc_transform.shape, lin_acc_transform)
+    lin_acc_transform = torch.matmul(rot_mat, lin_acc.reshape((num_envs, -1, 1))).reshape(
+        (num_envs, -1,))  # nx3x3 * n*3*1
+
+    lin_acc_clipped = torch.clamp(lin_acc_transform, -imu_max_lin_acc, imu_max_lin_acc)
+    ang_vel_clipped = torch.clamp(root_ang_bez, -imu_max_ang_vel, imu_max_ang_vel)
+    # print('here')
+    # print('lin c: ', lin_acc_clipped.shape, lin_acc_clipped)
+    # print('ang c: ', ang_vel_clipped.shape, ang_vel_clipped)
+    imu_val = torch.cat([lin_acc_clipped, ang_vel_clipped], 1)
+    return imu_val, root_vel_bez
+
+
+@torch.jit.script
+def compute_off_orn(
+        # tensors
+        root_pos_bez: Tensor,
+        root_orient_bez: Tensor,
+        goal: Tensor
+
+) -> Tensor:
+    distance_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])
+    distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
+    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
+    # print('here')
+    # print('distance_unit_vec: ', distance_unit_vec.shape, distance_unit_vec)
+    # print('orient: ', root_orient_bez.shape, root_orient_bez)
+
+    x = root_orient_bez[..., 0]
+    y = root_orient_bez[..., 1]
+    z = root_orient_bez[..., 2]
+    w = root_orient_bez[..., 3]
+    # yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y ** 2 + z ** 2))
+    wz = torch.mul(w, z)
+    xy = torch.mul(x, y)
+    yy = torch.mul(y, y)
+    zz = torch.mul(z, z)
+    wz_xy = torch.add(wz, xy)
+    wz_xy_2 = torch.mul(2, wz_xy)
+    yy_zz = torch.add(yy, zz)
+    yy_zz_2 = torch.mul(2, yy_zz)
+    yy_zz_2_1 = torch.sub(1, yy_zz_2)
+    yaw = torch.atan2(wz_xy_2, yy_zz_2_1)
+    cos = torch.cos(yaw)
+    sin = torch.sin(yaw)
+    d2_vect = torch.cat((cos.reshape((-1, 1)), sin.reshape((-1, 1))), dim=-1)
+    cos = torch.sum(d2_vect * distance_unit_vec, dim=-1)
+    distance_unit_vec_3d = torch.nn.functional.pad(input=distance_unit_vec, pad=(0, 1, 0, 0), mode='constant',
+                                                   value=0.0)
+    d2_vect_3d = torch.nn.functional.pad(input=d2_vect, pad=(0, 1, 0, 0), mode='constant',
+                                         value=0.0)
+    sin = torch.linalg.norm(torch.cross(distance_unit_vec_3d, d2_vect_3d, dim=1), dim=1)
+    vec = torch.cat((sin.reshape((-1, 1)), -cos.reshape((-1, 1))), dim=1)
+    # print('vec: ', vec.shape, vec)
+    return vec  # vec
+
+
+# No cleats
+@torch.jit.script
+def compute_feet_sensors_no_cleats(
+        # tensors
+        foot_contact_forces: Tensor,
+        forces: Tensor,
+        ones: Tensor,
+        zeros: Tensor,
+        zero: Tensor,
+        forces_case_1: Tensor,
+        forces_case_2: Tensor,
+        forces_case_3: Tensor,
+        forces_case_5: Tensor,
+        forces_case_6: Tensor,
+        forces_case_7: Tensor,
+        forces_case_9: Tensor,
+        forces_case_10: Tensor,
+        forces_case_11: Tensor,
+        forces_case_12: Tensor,
+
+) -> Tensor:
+    # Filter noise
+    foot_contact_forces[..., 0:3] = torch.where(
+        torch.abs(foot_contact_forces[..., 0:3]) > 0.01,
+        foot_contact_forces[..., 0:3],
+        zero)
+
+    # x sign
+    x = torch.where(
+        torch.abs(foot_contact_forces[..., 0:1]) > 0.0, ones, zeros)
+    x = torch.where(foot_contact_forces[..., 0:1] == 0, 2.0 * ones, x)
+
+    # y sign
+    y = torch.where(
+        torch.abs(foot_contact_forces[..., 1:2]) > 0.0, ones,
+        3.0 * ones)
+    y = torch.where(foot_contact_forces[..., 1:2] == 0, 3.0 * ones, y)
+
+    # Determining sensors used
+    sensor = torch.where(x == 1.0, zeros, 4.0 * ones)  # Is x positive
+    sensor = torch.where(x == 2.0, 8.0 * ones, sensor)  # Is x zero
+    case = torch.add(y, sensor)
+    forces = torch.where(case == 1.0,
+                         forces_case_1,
+                         forces)  # Is sensor +,+
+    forces = torch.where(case == 2.0,
+                         forces_case_2,
+                         forces)  # Is sensor +,-
+    forces = torch.where(case == 3.0,
+                         forces_case_3,
+                         forces)  # Is sensor +,0
+    forces = torch.where(case == 5.0,
+                         forces_case_5,
+                         forces)  # Is sensor -,+
+    forces = torch.where(case == 6.0,
+                         forces_case_6,
+                         forces)  # Is sensor -,-
+    forces = torch.where(case == 7.0,
+                         forces_case_7,
+                         forces)  # Is sensor -,0
+    forces = torch.where(case == 9.0,
+                         forces_case_9,
+                         forces)  # Is sensor 0,+
+    forces = torch.where(case == 10.0,
+                         forces_case_10,
+                         forces)  # Is sensor 0,-
+    forces = torch.where(case == 11.0,
+                         forces_case_11,
+                         forces)  # Is sensor 0,0
+    forces = torch.where(foot_contact_forces[..., 2:3] < 0.01,
+                         forces_case_12,
+                         forces)  # Is negative force
+    return forces
+
+
+# Cleats
+@torch.jit.script
+def compute_feet_sensors_cleats(
+        # tensors
+        left_contact_forces: Tensor,
+        right_contact_forces: Tensor,
+        forces: Tensor,
+        ones: Tensor
+) -> Tensor:
+    # left_pts = torch.linalg.norm(left_contact_forces.T, dim=0).T  # nx4
+    # right_pts = torch.linalg.norm(right_contact_forces.T, dim=0).T  # nx4
+    left_pts = left_contact_forces[..., 2]
+    right_pts = right_contact_forces[..., 2]
+    pts = torch.cat((left_pts, right_pts), 1)  # nx8
+    location = torch.where(pts > 1.0, ones, forces)
+    # print("self.left_pts: ", left_pts)
+    # print("self.left_contact_forces: ", left_contact_forces)
+    # print("self.right_pts: ", right_pts)
+    # print("self.right_contact_forces: ", right_contact_forces)
+    # print('feet: ', location)
+    return location
+
+
+@torch.jit.script
 def compute_bez_reward(
         # tensors
         dof_pos_bez: Tensor,
@@ -597,7 +871,7 @@ def compute_bez_reward(
         ball_init: Tensor,
         reset_buf: Tensor,
         progress_buf: Tensor,
-        feet,
+        feet: Tensor,
         # left_contact_forces: Tensor,
         # right_contact_forces: Tensor,
         max_episode_length: int,
@@ -630,18 +904,23 @@ def compute_bez_reward(
 
     # Feet reward
     ground_feet = torch.sum(feet, dim=1)
+    ground_feet_scaled = torch.mul(ground_feet, 0.01)
 
-    #  0.1 * ball_velocity_forward_reward - (distance_to_height + (0.05 * vel_reward + 0.05 * pos_reward))
+    #  0.1 * ball_velocity_forward_reward - ((distance_to_height + (0.05 * vel_reward + 0.05 * pos_reward)) - 0.01 * ground_feet)
+    #  0.1 * ball_velocity_forward_reward - distance_to_height - 0.05 * vel_reward - 0.05 * pos_reward + 0.01 * ground_feet
     vel_pos_reward = torch.add(vel_reward, pos_reward)
     height_vel_pos_reward = torch.add(distance_to_height, vel_pos_reward)
+    height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
     # height_pos_reward = torch.add(distance_to_height, pos_reward)
     # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
-    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.1)
+    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.01)
     ball_velocity_forward_reward_scaled_not = torch.mul(ball_velocity_forward_reward, 0.2)
     ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled, height_vel_pos_reward)
-    # print("vel_reward: ",float(vel_reward[0]))
-    # print("pos_reward: ", float(pos_reward[0]))
-    # print("distance_to_height: ", float(distance_to_height[0]))
+    print("vel_reward: ",float(vel_reward[0]))
+    print("pos_reward: ", float(pos_reward[0]))
+    print("distance_to_height: ", float(distance_to_height[0]))
+    print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
+    print("feet: ", feet)
     # -distance_to_height - 0.05 * vel_reward - 0.05 * pos_reward
     # ball_height_vel_pos_reward = torch.add(-1.0*distance_to_height, -1.0*vel_pos_reward)
 
@@ -716,13 +995,16 @@ def compute_bez_reward(
 
 
 @torch.jit.script
-def compute_bez_observations(dof_pos_bez: Tensor,
-                             dof_vel_bez: Tensor,  # 18
-                             imu: Tensor,  # 6
-                             off_orn: Tensor,  # 2
-                             feet: Tensor,  # 8
-                             ball_init: Tensor  # 2
-                             ) -> Tensor:
+def compute_bez_observations(
+        # tensors
+        dof_pos_bez: Tensor,
+        dof_vel_bez: Tensor,  # 18
+        imu: Tensor,  # 6
+        off_orn: Tensor,  # 2
+        feet: Tensor,  # 8
+        ball_init: Tensor  # 2
+
+) -> Tensor:
     obs = torch.cat((dof_pos_bez,
                      dof_vel_bez,  # 18
                      imu,  # 6
@@ -732,3 +1014,5 @@ def compute_bez_observations(dof_pos_bez: Tensor,
                      ), dim=-1)
 
     return obs
+
+
