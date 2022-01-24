@@ -205,6 +205,7 @@ class TestBezEnv(unittest.TestCase):
 
             # render the env
             self.env.render()
+
     """
     Trajectory environment test
     """
@@ -222,5 +223,7 @@ class TestBezEnv(unittest.TestCase):
 
             # render the env
             self.env.render()
+
+
 if __name__ == '__main__':
     unittest.main()

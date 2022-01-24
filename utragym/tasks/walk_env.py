@@ -36,7 +36,7 @@ class Joints(enum.IntEnum):
     RIGHT_LEG_6 = 17
 
 
-class KickEnv(VecTask):
+class WalkEnv(VecTask):
 
     def __init__(self, cfg, sim_device, graphics_device_id, headless):
         # Setup
@@ -58,13 +58,6 @@ class KickEnv(VecTask):
         v_ang = self.cfg["env"]["bezInitState"]["vAngular"]
         self.bez_init_state = pos + rot + v_lin + v_ang
 
-        # ball base init state
-        pos = self.cfg["env"]["ballInitState"]["pos"]
-        rot = self.cfg["env"]["ballInitState"]["rot"]
-        v_lin = self.cfg["env"]["ballInitState"]["vLinear"]
-        v_ang = self.cfg["env"]["ballInitState"]["vAngular"]
-        self.ball_init_state = pos + rot + v_lin + v_ang
-
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
 
@@ -79,7 +72,6 @@ class KickEnv(VecTask):
         self.feet_dim = 8
         self.dof_dim = 18  # or 16 if we remove head
         self.rnn_dim = 1
-        self.ball_dim = 2  # ball distance
 
         # Limits
         self.imu_max_ang_vel = 8.7266
@@ -90,7 +82,6 @@ class KickEnv(VecTask):
         # TODO Implement
         self.orn_limit = torch.tensor([1.] * self.orn_dim, device='cuda:0')
         self.feet_limit = torch.tensor([1.6] * self.feet_dim, device='cuda:0')
-        self.ball_start_limit = torch.tensor([0.3] * self.ball_dim, device='cuda:0')
 
         # IMU NOISE
         self._IMU_LIN_STDDEV_BIAS = 0.  # 0.02 * _MAX_LIN_ACC
@@ -106,7 +97,8 @@ class KickEnv(VecTask):
         self._JOIN_VELOCITY_STDDEV = self._JOIN_ANGLE_STDDEV / 120
 
         # Number of observation and actions
-        self.cfg["env"]["numObservations"] = 54  # self.dof_dim + self.imu_dim + self.orn_dim + self.ball_dim  # 30
+        self.cfg["env"][
+            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.orn_dim + self.feet_dim  # 52
         self.cfg["env"]["numActions"] = self.dof_dim
 
         super().__init__(config=self.cfg, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -141,10 +133,9 @@ class KickEnv(VecTask):
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
 
         self.goal = torch.tensor([[2, 0]] * self.num_envs, device='cuda:0')
-        self.ball_init = torch.tensor([self.ball_init_state[0:2]] * self.num_envs, device='cuda:0')
 
         self.initial_root_states = self.root_states.clone()
-        self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state] * self.num_envs,
+        self.initial_root_states[:] = to_torch([self.bez_init_state] * self.num_envs,
                                                device=self.device, requires_grad=False)
         self.initial_root_states[:, 7:13] = 0
 
@@ -156,21 +147,21 @@ class KickEnv(VecTask):
         self.root_vel_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 7:10]
         self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 10:13]
 
-        self.root_pos_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 0:3]
-        self.root_orient_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 3:7]
-        self.root_vel_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 7:10]
-
         self.prev_lin_vel = torch.tensor(self.num_envs * [[0, 0, 0]], device='cuda:0')
 
         self.cleats = False
         self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
 
         if self.cleats:
-            self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17,0:3]
-            self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[...,25:29, 0:3]
+            self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17,
+                                       0:3]
+            self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29,
+                                        0:3]
         else:
-            self.left_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 12,0:3]
-            self.right_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 20,0:3]
+            self.left_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 12,
+                                            0:3]
+            self.right_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[...,
+                                             20, 0:3]
 
         # self.left_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 6,
         # 0:3]
@@ -215,15 +206,12 @@ class KickEnv(VecTask):
     def _create_envs(self, num_envs, spacing, num_per_row):
         asset_root = "../../assets"
         asset_file_bez = "bez/model/soccerbot_box_sensor.urdf"
-        asset_file_ball = "bez/objects/ball.urdf"
 
         if "asset" in self.cfg["env"]:
             asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
             asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBez", asset_file_bez)
-            asset_file_ball = self.cfg["env"]["asset"].get("assetFileNameBall", asset_file_ball)
 
         asset_path = os.path.join(asset_root, asset_file_bez)
-        asset_path_ball = os.path.join(asset_root, asset_file_ball)
         asset_root = os.path.dirname(asset_path)
         asset_file_bez = os.path.basename(asset_path)
 
@@ -273,39 +261,16 @@ class KickEnv(VecTask):
             actuator_props['friction'][i] = 0.1
             actuator_props['effort'][i] = 2.5
 
-        asset_root_ball = os.path.dirname(asset_path_ball)
-        asset_file_ball = os.path.basename(asset_path_ball)
-
-        asset_options_ball = gymapi.AssetOptions()
-        asset_options_ball.default_dof_drive_mode = 0
-        asset_options_ball.armature = 0.0  # self.cfg["env"]["urdfAsset"]["armature"]
-        ball_asset = self.gym.load_asset(self.sim, asset_root_ball, asset_file_ball, asset_options_ball)
-
-        start_pose_ball = gymapi.Transform()
-        start_pose_ball.p = gymapi.Vec3(*self.ball_init_state[:3])
-
-        # compute aggregate size
-        num_bez_bodies = self.gym.get_asset_rigid_body_count(bez_asset)
-        num_bez_shapes = self.gym.get_asset_rigid_shape_count(bez_asset)
-        num_ball_bodies = self.gym.get_asset_rigid_body_count(ball_asset)
-        num_ball_shapes = self.gym.get_asset_rigid_shape_count(ball_asset)
-        max_agg_bodies = num_bez_bodies + num_ball_bodies
-        max_agg_shapes = num_bez_shapes + num_ball_shapes
-
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
 
         self.bez_indices = []
-        self.ball_indices = []
         self.bez_handles = []
-        self.ball_handles = []
         self.envs = []
 
         for i in range(self.num_envs):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
-
-            self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
 
             bez_handle = self.gym.create_actor(env_ptr, bez_asset, start_pose, "bez", i, 0,
                                                0)  # 1 for no self collision
@@ -315,20 +280,10 @@ class KickEnv(VecTask):
             bez_idx = self.gym.get_actor_index(env_ptr, bez_handle, gymapi.DOMAIN_SIM)
             self.bez_indices.append(bez_idx)
 
-            ball_handle = self.gym.create_actor(env_ptr, ball_asset, start_pose_ball, "ball", i, 0,
-                                                0)
-            self.gym.enable_actor_dof_force_sensors(env_ptr, ball_handle)
-
-            ball_idx = self.gym.get_actor_index(env_ptr, ball_handle, gymapi.DOMAIN_SIM)
-            self.ball_indices.append(ball_idx)
-
-            self.gym.end_aggregate(env_ptr)
             self.envs.append(env_ptr)
             self.bez_handles.append(bez_handle)
-            self.ball_handles.append(ball_handle)
 
         self.bez_indices = to_torch(self.bez_indices, dtype=torch.long, device=self.device)
-        self.ball_indices = to_torch(self.ball_indices, dtype=torch.long, device=self.device)
 
         self.dof_pos_limits_lower = []
         self.dof_pos_limits_upper = []
@@ -534,10 +489,7 @@ class KickEnv(VecTask):
             self.root_ang_bez,
             self.root_pos_bez,
             self.root_orient_bez,
-            self.root_pos_ball,
-            self.root_vel_ball,
             self.goal,
-            self.ball_init,
             self.reset_buf,
             self.progress_buf,
             self.feet,
@@ -571,8 +523,7 @@ class KickEnv(VecTask):
             self.dof_vel_bez,  # 18
             imu,  # 6
             off_orn,  # 2
-            self.feet,  # 8
-            self.ball_init  # 2
+            self.feet  # 8
         )
 
     def reset_idx(self, env_ids):
@@ -588,15 +539,10 @@ class KickEnv(VecTask):
         self.dof_vel_bez[env_ids] = velocities
 
         bez_indices = self.bez_indices[env_ids].to(dtype=torch.int32)
-        ball_indices = self.ball_indices[env_ids].to(dtype=torch.int32)
 
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.initial_root_states),
                                                      gymtorch.unwrap_tensor(bez_indices), len(bez_indices))
-
-        self.gym.set_actor_root_state_tensor_indexed(self.sim,
-                                                     gymtorch.unwrap_tensor(self.initial_root_states),
-                                                     gymtorch.unwrap_tensor(ball_indices), len(ball_indices))
 
         self.gym.set_dof_position_target_tensor_indexed(self.sim,
                                                         gymtorch.unwrap_tensor(self.default_dof_pos),
@@ -663,7 +609,6 @@ def compute_imu(
         num_envs: int
 
 ) -> Tuple[Tensor, Tensor]:
-
     lin_acc = torch.sub(root_vel_bez, prev_lin_vel)
     lin_acc = torch.div(lin_acc, dt)
     lin_acc = torch.sub(lin_acc, gravity_vec)
@@ -687,7 +632,6 @@ def compute_off_orn(
         goal: Tensor
 
 ) -> Tensor:
-
     distance_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])
     distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
     distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
@@ -743,7 +687,6 @@ def compute_feet_sensors_no_cleats(
         forces_case_12: Tensor,
 
 ) -> Tensor:
-
     # Filter noise
     foot_contact_forces[..., 0:3] = torch.where(
         torch.abs(foot_contact_forces[..., 0:3]) > 0.01,
@@ -809,7 +752,6 @@ def compute_feet_sensors_cleats(
         forces: Tensor,
         ones: Tensor
 ) -> Tensor:
-
     # original
     left_pts = torch.linalg.norm(left_contact_forces.T, dim=0).T  # nx4
     right_pts = torch.linalg.norm(right_contact_forces.T, dim=0).T  # nx4
@@ -839,10 +781,7 @@ def compute_bez_reward(
         imu_ang_bez: Tensor,
         root_pos_bez: Tensor,
         root_orient_bez: Tensor,
-        root_pos_ball: Tensor,
-        root_vel_ball: Tensor,
         goal: Tensor,
-        ball_init: Tensor,
         reset_buf: Tensor,
         progress_buf: Tensor,
         feet: Tensor,
@@ -852,47 +791,43 @@ def compute_bez_reward(
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
     # Calculate Velocity direction field
-    distance_to_ball = torch.sub(root_pos_ball[..., 0:2], root_pos_bez[..., 0:2])  # nx2
-    distance_to_ball_norm = torch.reshape(torch.linalg.norm(distance_to_ball, dim=1), (-1, 1))
-    distance_unit_vec = torch.div(distance_to_ball, distance_to_ball_norm)  # 2xn / nx1 = nx2
-    velocity_forward_reward = torch.sum(torch.mul(distance_unit_vec, imu_lin_bez[..., 0:2]), dim=-1)
-
-    distance_to_goal = torch.sub(goal, root_pos_ball[..., 0:2])
+    distance_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])  # nx2
     distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
-
-    ball_velocity_forward_reward = torch.sum(torch.mul(distance_unit_vec, root_vel_ball[..., 0:2]), dim=-1)
+    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)  # 2xn / nx1 = nx2
+    velocity_forward_reward = torch.sum(torch.mul(distance_unit_vec, imu_lin_bez[..., 0:2]), dim=-1)
 
     DESIRED_HEIGHT = 0.325  # Height of ready position
 
     # reward
     # old
-    vel_bez = torch.cat((imu_lin_bez,imu_ang_bez), dim=1)
+    vel_bez = torch.cat((imu_lin_bez, imu_ang_bez), dim=1)
     vel_bez = imu_ang_bez
     vel_reward = torch.mul(torch.linalg.norm(vel_bez, dim=1), 0.05)
     # new
-    # vel_lin_reward = torch.mul(torch.linalg.norm(imu_lin_bez, dim=1), 0.05)
-    # vel_ang_reward = torch.mul(torch.linalg.norm(imu_ang_bez, dim=1), 0.05)
+    vel_lin_reward = torch.mul(torch.linalg.norm(imu_lin_bez, dim=1), 0.05)
+    vel_ang_reward = torch.mul(torch.linalg.norm(imu_ang_bez, dim=1), 0.05)
     # vel_reward = torch.add(vel_lin_reward, vel_ang_reward)
-    pos_reward = torch.mul(torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1), 0.05)
+    pos_reward = torch.mul(torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1), 1)
     distance_to_height = torch.abs(DESIRED_HEIGHT - root_pos_bez[..., 2])
-    distance_kicked = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init), dim=1)
 
     # Feet reward
-    # ground_feet = torch.sum(feet, dim=1)
-    # ground_feet_scaled = torch.mul(ground_feet, 0.01)
-    # ground_feet_scaled = torch.sub(ground_feet_scaled, 0.08)
+    ground_feet = torch.sum(feet, dim=1)
+    ground_feet_scaled = torch.mul(ground_feet, 0.01)
+    ground_feet_scaled = torch.sub(ground_feet_scaled, 0.08)
 
-    #  0.1 * ball_velocity_forward_reward - ((distance_to_height + (0.05 * vel_reward + 0.05 * pos_reward)) - 0.01 * ground_feet)
-    #  0.1 * ball_velocity_forward_reward - distance_to_height - 0.05 * vel_reward - 0.05 * pos_reward + 0.01 * ground_feet
+    #  - ((distance_to_height + ((.05 * vel_lin_reward + 0.05 * vel_lin_reward) + 0.05 * pos_reward)) - 0.01 * ground_feet)
+    #  - distance_to_height - 0.05 * vel_lin_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward - 0.01 * ground_feet
+
+    # 0.05 * (51 - pos_reward) + 0.25 * (10 - (vel_reward + pos_reward)) - distance_to_height
+    vel_reward = torch.sub(10.0, vel_reward)
+    vel_reward = torch.mul(vel_reward, 0.25)
+    pos_reward = torch.sub(51.0, pos_reward)
+    pos_reward = torch.mul(pos_reward, 0.05)
     vel_pos_reward = torch.add(vel_reward, pos_reward)
-    height_vel_pos_reward = torch.add(distance_to_height, vel_pos_reward)
+    height_vel_pos_reward = torch.sub(vel_pos_reward, distance_to_height)
     # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
     # height_pos_reward = torch.add(distance_to_height, pos_reward)
     # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
-    ball_velocity_forward_reward_scaled_after = torch.mul(ball_velocity_forward_reward, 0.1)
-    ball_velocity_forward_reward_scaled_before = torch.mul(ball_velocity_forward_reward, 0.1)
-    ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled_after, height_vel_pos_reward)
 
     # print("vel_reward: ",float(vel_reward[0]))
     # print("pos_reward: ", float(pos_reward[0]))
@@ -900,29 +835,49 @@ def compute_bez_reward(
     # print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
     # print("feet: ", feet)
 
-    # 0.1 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height
-    velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.05)
+    # 0.1 * velocity_forward_reward - distance_to_height
+    velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.1)
     vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
-    ball_vel_height_reward = torch.add(ball_velocity_forward_reward_scaled_before, vel_height_reward)
+    vel_height_reward_scaled = torch.mul(vel_height_reward, 0.1)
+    # vel_height_reward = torch.sub(vel_height_reward, height_vel_pos_reward)
 
-    reward = torch.where(distance_kicked > 0.3,
-                         ball_height_vel_pos_reward,
-                         ball_vel_height_reward
+    distance_to_goal_norm = torch.reshape(distance_to_goal_norm, (-1))
+    reward = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
+                         height_vel_pos_reward,
+                         vel_height_reward_scaled
                          )
+
     # Reset
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
 
     # Fall
     reset = torch.where(root_pos_bez[..., 2] < 0.275, ones, reset)
-    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -1.0, reward)
+    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -100.0, reward) # -100
 
     # Close to the Goal
-    distance_to_goal_norm = torch.reshape(distance_to_goal_norm, (-1))
-    reset = torch.where(distance_to_goal_norm < 0.05, ones,
-                        reset)
-    reward = torch.where(distance_to_goal_norm < 0.05,
-                         torch.ones_like(reward) * 10,
+    state = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
+                        ones,
+                        torch.zeros_like(reward)
+                        )
+    state = torch.where(pos_reward < 0.01,  # Close to the default position
+                        state + torch.ones_like(reward),
+                        state
+                        )
+    state = torch.where(vel_ang_reward < 0.01,  # Close to no angular velocity
+                        state + torch.ones_like(reward),
+                        state
+                        )
+    state = torch.where(vel_lin_reward < 0.01,  # Close to no linear velocity
+                        state + torch.ones_like(reward),
+                        state
+                        )
+    reset = torch.where(state == 4.0,  # Win state
+                        ones,
+                        reset
+                        )
+    reward = torch.where(state == 4.0,
+                         torch.ones_like(reward) * (1000.0 - 1000.0 * (progress_buf/max_episode_length)),
                          reward)
 
     # Out of Bound
@@ -933,15 +888,8 @@ def compute_bez_reward(
         reset)
     reward = torch.where(
         distance_to_goal_norm > goal_norm_scaled,
-        torch.ones_like(reward) * -1.0,
+        torch.ones_like(reward) * -100.0, # -100
         reward)
-
-    # left_pts = torch.linalg.norm(left_contact_forces.T, dim=0).T  # nx4
-    # right_pts = torch.linalg.norm(right_contact_forces.T, dim=0).T  # nx4
-    # pts = torch.add(left_pts,right_pts)
-    # # pts = torch.cat((left_pts, right_pts), dim=1)  # nx8
-    #
-    # reset = torch.where(pts > 100.0, ones, reset)
 
     # Horizon Ended
     reset = torch.where(progress_buf >= max_episode_length, ones, reset)
@@ -962,17 +910,13 @@ def compute_bez_observations(
         imu: Tensor,  # 6
         off_orn: Tensor,  # 2
         feet: Tensor,  # 8
-        ball_init: Tensor  # 2
 
 ) -> Tensor:
     obs = torch.cat((dof_pos_bez,
                      dof_vel_bez,  # 18
                      imu,  # 6
                      off_orn,  # 2
-                     feet,  # 8
-                     ball_init  # 2
+                     feet  # 8
                      ), dim=-1)
 
     return obs
-
-
