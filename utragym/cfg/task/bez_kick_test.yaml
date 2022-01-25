@@ -111,9 +111,16 @@ env:
 
   asset:
     assetRoot: ../resources/assets
-    assetFileNameBez: bez/model/soccerbot_stl.urdf # soccerbot_box soccerbot_box_sensor soccerbot_stl soccerbot_stl_sensor
     assetFileNameBall: objects/ball.urdf
+    assetFileNameBezStlSensor: bez/model/soccerbot_stl_sensor.urdf
+    assetFileNameBezStl: bez/model/soccerbot_stl.urdf
+    assetFileNameBezBox: bez/model/soccerbot_box.urdf
+    assetFileNameBezBoxSensor: bez/model/soccerbot_box_sensor.urdf
+    cleats: False
+    stl: True
 
+  debug:
+    rewards: True
 
 sim:
   dt: 0.01667 # 1/60 s

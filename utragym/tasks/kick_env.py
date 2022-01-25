@@ -65,6 +65,12 @@ class KickEnv(VecTask):
         v_ang = self.cfg["env"]["ballInitState"]["vAngular"]
         self.ball_init_state = pos + rot + v_lin + v_ang
 
+        # model choice
+        self.cleats = self.cfg["env"]["asset"]["cleats"]
+
+        # debug
+        self.debug_rewards = self.cfg["env"]["debug"]["rewards"]
+
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
 
@@ -162,7 +168,6 @@ class KickEnv(VecTask):
 
         self.prev_lin_vel = torch.tensor(self.num_envs * [[0, 0, 0]], device='cuda:0')
 
-        self.cleats = False
         self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
 
         if self.cleats:
@@ -219,8 +224,18 @@ class KickEnv(VecTask):
 
         if "asset" in self.cfg["env"]:
             asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
-            asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBez", asset_file_bez)
             asset_file_ball = self.cfg["env"]["asset"].get("assetFileNameBall", asset_file_ball)
+
+            if self.cfg["env"]["asset"]["stl"]:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStlSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStl", asset_file_bez)
+            else:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBoxSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBox", asset_file_bez)
 
         asset_path = os.path.join(asset_root, asset_file_bez)
         asset_path_ball = os.path.join(asset_root, asset_file_ball)
@@ -545,6 +560,10 @@ class KickEnv(VecTask):
             # self.right_arm_contact_forces,
             # int
             self.max_episode_length,
+            # float
+            self.dt,
+            # bool
+            self.debug_rewards,
 
         )
 
@@ -849,8 +868,10 @@ def compute_bez_reward(
         # left_contact_forces: Tensor,
         # right_contact_forces: Tensor,
         max_episode_length: int,
+        dt: float,
+        debug_rewards: bool
 
-) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
+) -> Tuple[Tensor, Tensor]:  # (reward, reset)
     # Calculate Velocity direction field
     distance_to_ball = torch.sub(root_pos_ball[..., 0:2], root_pos_bez[..., 0:2])  # nx2
     distance_to_ball_norm = torch.reshape(torch.linalg.norm(distance_to_ball, dim=1), (-1, 1))
@@ -868,7 +889,6 @@ def compute_bez_reward(
     # reward
     # old
     vel_bez = torch.cat((imu_lin_bez,imu_ang_bez), dim=1)
-    vel_bez = imu_ang_bez
     vel_reward = torch.mul(torch.linalg.norm(vel_bez, dim=1), 0.05)
     # new
     # vel_lin_reward = torch.mul(torch.linalg.norm(imu_lin_bez, dim=1), 0.05)
@@ -876,12 +896,12 @@ def compute_bez_reward(
     # vel_reward = torch.add(vel_lin_reward, vel_ang_reward)
     pos_reward = torch.mul(torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1), 0.05)
     distance_to_height = torch.abs(DESIRED_HEIGHT - root_pos_bez[..., 2])
-    distance_kicked = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init), dim=1)
+    distance_kicked_norm = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init), dim=1)
 
     # Feet reward
-    # ground_feet = torch.sum(feet, dim=1)
-    # ground_feet_scaled = torch.mul(ground_feet, 0.01)
-    # ground_feet_scaled = torch.sub(ground_feet_scaled, 0.08)
+    ground_feet = torch.sum(feet, dim=1)
+    ground_feet_scaled = torch.mul(ground_feet, 0.02)
+    # ground_feet_scaled = torch.sub(ground_feet_scaled, 0.004)
 
     #  0.1 * ball_velocity_forward_reward - ((distance_to_height + (0.05 * vel_reward + 0.05 * pos_reward)) - 0.01 * ground_feet)
     #  0.1 * ball_velocity_forward_reward - distance_to_height - 0.05 * vel_reward - 0.05 * pos_reward + 0.01 * ground_feet
@@ -894,28 +914,23 @@ def compute_bez_reward(
     ball_velocity_forward_reward_scaled_before = torch.mul(ball_velocity_forward_reward, 0.1)
     ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled_after, height_vel_pos_reward)
 
-    # print("vel_reward: ",float(vel_reward[0]))
-    # print("pos_reward: ", float(pos_reward[0]))
-    # print("distance_to_height: ", float(distance_to_height[0]))
-    # print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
-    # print("feet: ", feet)
-
     # 0.1 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height
     velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.05)
     vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
     ball_vel_height_reward = torch.add(ball_velocity_forward_reward_scaled_before, vel_height_reward)
 
-    reward = torch.where(distance_kicked > 0.3,
+    reward = torch.where(distance_kicked_norm > 0.3,
                          ball_height_vel_pos_reward,
                          ball_vel_height_reward
                          )
+
     # Reset
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
 
     # Fall
     reset = torch.where(root_pos_bez[..., 2] < 0.275, ones, reset)
-    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -1.0, reward)
+    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -10.0, reward)
 
     # Close to the Goal
     distance_to_goal_norm = torch.reshape(distance_to_goal_norm, (-1))
@@ -933,7 +948,7 @@ def compute_bez_reward(
         reset)
     reward = torch.where(
         distance_to_goal_norm > goal_norm_scaled,
-        torch.ones_like(reward) * -1.0,
+        torch.ones_like(reward) * -10.0,
         reward)
 
     # left_pts = torch.linalg.norm(left_contact_forces.T, dim=0).T  # nx4
@@ -948,7 +963,22 @@ def compute_bez_reward(
 
     reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
                          reward)
-    # print(reward)
+    if debug_rewards:
+        current_velocity_norm = torch.reshape(torch.linalg.norm(root_vel_ball[..., 0:2], dim=1), (-1, 1))
+        print("distance_to_goal_norm: ", float(distance_to_goal_norm[0]))
+        print("distance_traveled: ", float(distance_kicked_norm[0]), " Time elapsed: ", float((progress_buf)[0] * dt))
+        print("average_velocity: ", float(distance_kicked_norm[0])/float((progress_buf)[0] * dt))
+        print("current_velocity: ", float(current_velocity_norm[0]))
+
+        print("ball_velocity_forward_reward: ", float(ball_velocity_forward_reward_scaled_after[0]))
+        print("velocity_forward_reward: ", float(velocity_forward_reward_scaled[0]))
+        print("vel_reward: ", float(vel_reward[0]))
+        print("pos_reward: ", float(pos_reward[0]))
+        print("distance_to_height: ", float(distance_to_height[0]))
+        print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
+        print("feet: ", feet.float())
+        print("reword: ", float(reward[0]))
+
     # reset = torch.zeros_like(reset_buf)
 
     return reward, reset

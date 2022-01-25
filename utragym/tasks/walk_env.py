@@ -57,6 +57,10 @@ class WalkEnv(VecTask):
         v_lin = self.cfg["env"]["bezInitState"]["vLinear"]
         v_ang = self.cfg["env"]["bezInitState"]["vAngular"]
         self.bez_init_state = pos + rot + v_lin + v_ang
+        self.bez_init_xy = torch.tensor(self.bez_init_state[0:2], device='cuda:0')
+
+        # model choice
+        self.cleats = self.cfg["env"]["asset"]["cleats"]
 
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
@@ -209,7 +213,17 @@ class WalkEnv(VecTask):
 
         if "asset" in self.cfg["env"]:
             asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
-            asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBez", asset_file_bez)
+
+            if self.cfg["env"]["asset"]["stl"]:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStlSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStl", asset_file_bez)
+            else:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBoxSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBox", asset_file_bez)
 
         asset_path = os.path.join(asset_root, asset_file_bez)
         asset_root = os.path.dirname(asset_path)
@@ -493,10 +507,14 @@ class WalkEnv(VecTask):
             self.reset_buf,
             self.progress_buf,
             self.feet,
+            self.bez_init_xy,
             # self.left_arm_contact_forces,
             # self.right_arm_contact_forces,
             # int
             self.max_episode_length,
+            # float
+            self.dt
+
 
         )
 
@@ -507,7 +525,7 @@ class WalkEnv(VecTask):
         self.gym.refresh_net_contact_force_tensor(self.sim)
         # print('left_arm_contact_forces: ', self.left_arm_contact_forces, torch.linalg.norm(self.left_arm_contact_forces.T, dim=0).T)
         # print('right_arm_contact_forces: ', self.right_arm_contact_forces, torch.linalg.norm(self.right_arm_contact_forces.T, dim=0).T)
-
+        # print("Pos: ", self.root_pos_bez[..., 0:3])
         imu = self.imu()
         off_orn = self.off_orn()
 
@@ -785,9 +803,11 @@ def compute_bez_reward(
         reset_buf: Tensor,
         progress_buf: Tensor,
         feet: Tensor,
+        bez_init_state: Tensor,
         # left_contact_forces: Tensor,
         # right_contact_forces: Tensor,
         max_episode_length: int,
+        dt: float,
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
     # Calculate Velocity direction field
@@ -801,13 +821,12 @@ def compute_bez_reward(
     # reward
     # old
     vel_bez = torch.cat((imu_lin_bez, imu_ang_bez), dim=1)
-    vel_bez = imu_ang_bez
-    vel_reward = torch.mul(torch.linalg.norm(vel_bez, dim=1), 0.05)
+    vel_reward = torch.linalg.norm(vel_bez, dim=1)
     # new
-    vel_lin_reward = torch.mul(torch.linalg.norm(imu_lin_bez, dim=1), 0.05)
-    vel_ang_reward = torch.mul(torch.linalg.norm(imu_ang_bez, dim=1), 0.05)
+    vel_lin_reward = torch.linalg.norm(imu_lin_bez, dim=1)
+    vel_ang_reward = torch.linalg.norm(imu_ang_bez, dim=1)
     # vel_reward = torch.add(vel_lin_reward, vel_ang_reward)
-    pos_reward = torch.mul(torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1), 1)
+    pos_reward = torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
     distance_to_height = torch.abs(DESIRED_HEIGHT - root_pos_bez[..., 2])
 
     # Feet reward
@@ -815,31 +834,54 @@ def compute_bez_reward(
     ground_feet_scaled = torch.mul(ground_feet, 0.01)
     ground_feet_scaled = torch.sub(ground_feet_scaled, 0.08)
 
-    #  - ((distance_to_height + ((.05 * vel_lin_reward + 0.05 * vel_lin_reward) + 0.05 * pos_reward)) - 0.01 * ground_feet)
-    #  - distance_to_height - 0.05 * vel_lin_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward - 0.01 * ground_feet
+    legacy = False
+    if legacy:
+        # Legacy
+        # 0.05 * (51 - pos_reward) + 0.25 * (10 - (vel_reward)) - distance_to_height
+        vel_reward_scaled = torch.sub(10.0, vel_reward)
+        vel_reward_scaled = torch.mul(vel_reward_scaled, 0.25)
+        pos_reward_scaled = torch.sub(51.0, pos_reward)
+        pos_reward_scaled = torch.mul(pos_reward_scaled, 0.05)
+        vel_pos_reward = torch.add(vel_reward_scaled, pos_reward_scaled)
+        height_vel_pos_reward = torch.sub(vel_pos_reward, distance_to_height)
+        # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
+        # height_pos_reward = torch.add(distance_to_height, pos_reward)
+        # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
 
-    # 0.05 * (51 - pos_reward) + 0.25 * (10 - (vel_reward + pos_reward)) - distance_to_height
-    vel_reward = torch.sub(10.0, vel_reward)
-    vel_reward = torch.mul(vel_reward, 0.25)
-    pos_reward = torch.sub(51.0, pos_reward)
-    pos_reward = torch.mul(pos_reward, 0.05)
-    vel_pos_reward = torch.add(vel_reward, pos_reward)
-    height_vel_pos_reward = torch.sub(vel_pos_reward, distance_to_height)
-    # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
-    # height_pos_reward = torch.add(distance_to_height, pos_reward)
-    # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
+        # 0.1 * (0.1 * velocity_forward_reward - distance_to_height)
+        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.1)
+        vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
+        vel_height_reward_scaled = torch.mul(vel_height_reward, 0.1)
+    else:
+        # Variant Walking
+        #  - ((distance_to_height + ((.05 * vel_ang_reward + 0.05 * vel_lin_reward) + 0.05 * pos_reward)) - 0.01 * ground_feet)
+        #  height_vel_pos_reward = - distance_to_height - 0.05 * vel_ang_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward - 0.01 * ground_feet
+        #  height_vel_pos_ang_reward = - distance_to_height  - 0.05 * vel_ang_reward - 0.05 * pos_reward - 0.01 * ground_feet
+        scale = 0.05
+        vel_reward_scaled = torch.mul(vel_reward, scale)
+        vel_ang_reward_scaled = torch.mul(vel_ang_reward, scale)
+        pos_reward_scaled = torch.mul(pos_reward, scale)
+        vel_pos_reward = torch.add(vel_reward_scaled, pos_reward_scaled)
+        vel_ang_pos_reward = torch.add(vel_ang_reward_scaled, pos_reward)
+        height_vel_pos_reward = -torch.add(vel_pos_reward, distance_to_height)
+        height_vel_pos_ang_reward = -torch.add(vel_ang_pos_reward, distance_to_height)
+        # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
+        # height_pos_reward = torch.add(distance_to_height, pos_reward)
+        # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
 
-    # print("vel_reward: ",float(vel_reward[0]))
+        # 0.1 velocity_forward_reward - distance_to_height
+        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 1)
+        vel_height_reward = torch.add(velocity_forward_reward_scaled, distance_to_height)
+        vel_height_reward_scaled = torch.mul(vel_height_reward, 1)
+
+
+    # print("vel_ang_reward: ",float(vel_ang_reward[0]))
+    # print("vel_lin_reward: ",float(vel_lin_reward[0]))
     # print("pos_reward: ", float(pos_reward[0]))
     # print("distance_to_height: ", float(distance_to_height[0]))
+    # print("height_vel_pos_reward: ", float(height_vel_pos_reward[0]))
     # print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
     # print("feet: ", feet)
-
-    # 0.1 * velocity_forward_reward - distance_to_height
-    velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.1)
-    vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
-    vel_height_reward_scaled = torch.mul(vel_height_reward, 0.1)
-    # vel_height_reward = torch.sub(vel_height_reward, height_vel_pos_reward)
 
     distance_to_goal_norm = torch.reshape(distance_to_goal_norm, (-1))
     reward = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
@@ -856,19 +898,28 @@ def compute_bez_reward(
     reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -100.0, reward) # -100
 
     # Close to the Goal
+
+    # distance_traveled = torch.sub(root_pos_bez[..., 0:2], bez_init_state)  # nx2
+    # distance_traveled_norm = torch.reshape(torch.linalg.norm(distance_traveled, dim=1), (-1, 1))
+    # average_velocity_norm = torch.reshape(torch.linalg.norm(imu_lin_bez[..., 0:2], dim=1), (-1, 1))
+    # print("distance_to_goal_norm: ", float(distance_to_goal_norm[0]))
+    # print("distance_traveled: ", float(distance_traveled_norm[0]), " Time elapsed: ", float((progress_buf)[0] * dt))
+    # print("average_velocity: ", float(distance_traveled_norm[0])/float((progress_buf)[0] * dt))
+    # print("current_velocity: ", float(average_velocity_norm[0]))
+
     state = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
                         ones,
                         torch.zeros_like(reward)
                         )
-    state = torch.where(pos_reward < 0.01,  # Close to the default position
+    state = torch.where(pos_reward < 0.15,  # Close to the default position
                         state + torch.ones_like(reward),
                         state
                         )
-    state = torch.where(vel_ang_reward < 0.01,  # Close to no angular velocity
+    state = torch.where(vel_ang_reward < 0.1,  # Close to no angular velocity
                         state + torch.ones_like(reward),
                         state
                         )
-    state = torch.where(vel_lin_reward < 0.01,  # Close to no linear velocity
+    state = torch.where(vel_lin_reward < 0.1,  # Close to no linear velocity
                         state + torch.ones_like(reward),
                         state
                         )
@@ -877,7 +928,7 @@ def compute_bez_reward(
                         reset
                         )
     reward = torch.where(state == 4.0,
-                         torch.ones_like(reward) * (1000.0 - 1000.0 * (progress_buf/max_episode_length)),
+                         torch.ones_like(reward) * (1000.0 - 1000.0 * (progress_buf / max_episode_length)),
                          reward)
 
     # Out of Bound
@@ -888,7 +939,7 @@ def compute_bez_reward(
         reset)
     reward = torch.where(
         distance_to_goal_norm > goal_norm_scaled,
-        torch.ones_like(reward) * -100.0, # -100
+        torch.ones_like(reward) * -100.0,
         reward)
 
     # Horizon Ended
