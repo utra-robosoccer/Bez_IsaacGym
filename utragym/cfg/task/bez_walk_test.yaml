@@ -5,7 +5,7 @@ physics_engine: 'physx'
 
 # if given will override the device setting in gym.
 env:
-  numEnvs: 100 #${resolve_default:4096,${...num_envs}} # 10 4096
+  numEnvs: 1 #${resolve_default:4096,${...num_envs}} # 10 4096
   envSpacing: 2 # [m]
   episodeLength: 1000
   clipActions: 3.9
@@ -20,6 +20,9 @@ env:
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
+
+  goalState:
+    goal: [ 2.0, 0.0 ]
 
   control:
     # PD Drive parameters:
@@ -112,6 +115,8 @@ env:
     cleats: False
     stl: True
 
+  debug:
+      rewards: False
 
 sim:
   dt: 0.01667 # 1/60 s

@@ -1,6 +1,5 @@
 # used to create the object
 name: bez_kick
-
 physics_engine: 'physx'
 
 # if given will override the device setting in gym.
@@ -16,16 +15,23 @@ env:
     restitution: 0.0  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.34 ] # xyz [m] 0.355 for default or 0.33 for ready
-    rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat] 0, -0.707, 0, -0.707 for flat 0.0, 0.0, 0.0, 1.0 for standing up
+    pos: [ 0.0, 0.0, 0.37 ] # xyz [m] 0.355 for default or 0.33 for ready
+    rot: [0.0, 0.0, 0.0, 1.0] # xyzw [quat]
+    # 0.0, 0.0, 0.0, 1.0 for standing up
+    # 0, -0.707, 0, -0.707 for flat looking down
+    # 0, 0.707, 0, -0.707 for flat looking up
+    # 0.0, 0.3827, 0.0, 0.9239 for 45 deg
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   ballInitState:
-    pos: [ 0.175, 0, 0.1 ] # xyz [m]
+    pos: [ 0.175, 0.0, 0.1 ] # xyz [m]
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
+
+  goalState:
+    goal: [ 2.0, 0.0]
 
   control:
     # PD Drive parameters:

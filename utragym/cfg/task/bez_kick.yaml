@@ -27,6 +27,9 @@ env:
     vLinear: [ 0.0, 0.0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
+  goalState:
+    goal: [ 1.5, 0.0 ]
+
   control:
     # PD Drive parameters:
     stiffness: 100 # [N*m/rad] maybe 2.5
@@ -120,7 +123,7 @@ env:
     stl: True
 
   debug:
-    rewards: False
+    rewards: True
 
 sim:
   dt: 0.01667 # 1/60 s

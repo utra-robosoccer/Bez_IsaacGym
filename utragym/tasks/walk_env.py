@@ -1,8 +1,6 @@
-import math
-
-import numpy as np
 import os
 import time
+import math
 
 from utils.torch_jit_utils import *
 from .base.vec_task import VecTask
@@ -57,10 +55,15 @@ class WalkEnv(VecTask):
         v_lin = self.cfg["env"]["bezInitState"]["vLinear"]
         v_ang = self.cfg["env"]["bezInitState"]["vAngular"]
         self.bez_init_state = pos + rot + v_lin + v_ang
-        self.bez_init_xy = torch.tensor(self.bez_init_state[0:2], device='cuda:0')
+
+        # goal state
+        goal = self.cfg["env"]["goalState"]["goal"]
 
         # model choice
         self.cleats = self.cfg["env"]["asset"]["cleats"]
+
+        # debug
+        self.debug_rewards = self.cfg["env"]["debug"]["rewards"]
 
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
@@ -83,10 +86,6 @@ class WalkEnv(VecTask):
         self.AX_12_velocity = (59 / 60) * 2 * np.pi  # Ask sharyar for later - 11.9 rad/s
         self.MX_28_velocity = 2 * np.pi  # 24.5 rad/s
 
-        # TODO Implement
-        self.orn_limit = torch.tensor([1.] * self.orn_dim, device='cuda:0')
-        self.feet_limit = torch.tensor([1.6] * self.feet_dim, device='cuda:0')
-
         # IMU NOISE
         self._IMU_LIN_STDDEV_BIAS = 0.  # 0.02 * _MAX_LIN_ACC
         self._IMU_ANG_STDDEV_BIAS = 0.  # 0.02 * _MAX_ANG_VEL
@@ -108,11 +107,16 @@ class WalkEnv(VecTask):
         super().__init__(config=self.cfg, sim_device=sim_device, graphics_device_id=graphics_device_id,
                          headless=headless)
 
+        # simulation parameters
         self.dt = self.sim_params.dt
         self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
 
+        # TODO Implement
+        self.orn_limit = torch.tensor([1.] * self.orn_dim, device=self.device)
+        self.feet_limit = torch.tensor([1.6] * self.feet_dim, device=self.device)
+
         # camera view
-        if self.viewer != None:
+        if self.viewer is not None:
             p = self.cfg["env"]["viewer"]["pos"]
             lookat = self.cfg["env"]["viewer"]["lookat"]
             cam_pos = gymapi.Vec3(p[0], p[1], p[2])
@@ -136,25 +140,28 @@ class WalkEnv(VecTask):
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
 
-        self.goal = torch.tensor([[2, 0]] * self.num_envs, device='cuda:0')
+        self.goal = torch.tensor([goal], device=self.device).repeat((self.num_envs, 1))
+        self.bez_init_xy = torch.tensor(self.bez_init_state[0:2], device=self.device)
 
         self.initial_root_states = self.root_states.clone()
-        self.initial_root_states[:] = to_torch([self.bez_init_state] * self.num_envs,
-                                               device=self.device, requires_grad=False)
+        self.initial_root_states[:] = to_torch([self.bez_init_state],
+                                               device=self.device, requires_grad=False).repeat((self.num_envs, 1))
         self.initial_root_states[:, 7:13] = 0
 
         self.dof_pos_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 0]
         self.dof_vel_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 1]
 
         self.root_pos_bez = self.root_states.view(self.num_envs, -1, 13)[..., 0, 0:3]
-        self.root_orient_bez = self.root_states.view(self.num_envs, -1, 13)[..., 0, 3:7]
+        # self.root_orient_bez = self.root_states.view(self.num_envs, -1, 13)[..., 0, 3:7]
+
+        # Imu link
+        self.root_orient_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 3:7]
         self.root_vel_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 7:10]
         self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 10:13]
 
-        self.prev_lin_vel = torch.tensor(self.num_envs * [[0, 0, 0]], device='cuda:0')
+        self.prev_lin_vel = torch.tensor([[0, 0, 0]], device=self.device).repeat((self.num_envs, 1))
 
-        self.cleats = False
-        self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
+        self.feet = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))
 
         if self.cleats:
             self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17,
@@ -187,6 +194,7 @@ class WalkEnv(VecTask):
                                    requires_grad=False)
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
             (self.num_envs, 1))
+        self.up_vec = to_torch(get_axis_params(1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
     def create_sim(self):
@@ -390,7 +398,7 @@ class WalkEnv(VecTask):
         6-------7    2-------3
         :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
         """
-        forces = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)  # nx8
+        forces = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))  # nx8
         ones = torch.ones_like(forces)
 
         location = compute_feet_sensors_cleats(
@@ -420,7 +428,7 @@ class WalkEnv(VecTask):
         6-------7    2-------3
         :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
         """
-        forces = torch.tensor(self.num_envs * [[-1.] * 4], device=self.device)  # nx4
+        forces = torch.tensor([[-1.] * 4], device=self.device).repeat((self.num_envs, 1))
 
         # General tensors
         ones = torch.ones(1, device=self.device)
@@ -503,6 +511,7 @@ class WalkEnv(VecTask):
             self.root_ang_bez,
             self.root_pos_bez,
             self.root_orient_bez,
+            self.up_vec,
             self.goal,
             self.reset_buf,
             self.progress_buf,
@@ -512,9 +521,11 @@ class WalkEnv(VecTask):
             # self.right_arm_contact_forces,
             # int
             self.max_episode_length,
+            self.num_envs,
             # float
-            self.dt
-
+            self.dt,
+            # bool
+            self.debug_rewards,
 
         )
 
@@ -523,13 +534,11 @@ class WalkEnv(VecTask):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
-        # print('left_arm_contact_forces: ', self.left_arm_contact_forces, torch.linalg.norm(self.left_arm_contact_forces.T, dim=0).T)
-        # print('right_arm_contact_forces: ', self.right_arm_contact_forces, torch.linalg.norm(self.right_arm_contact_forces.T, dim=0).T)
-        # print("Pos: ", self.root_pos_bez[..., 0:3])
+
         imu = self.imu()
         off_orn = self.off_orn()
 
-        # self.feet = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)
+        # self.feet = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))
         if self.cleats:
             self.feet = self.feet_sensors_cleats()
         else:
@@ -549,12 +558,44 @@ class WalkEnv(VecTask):
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
 
+        # DOF randomization
         positions_offset = torch_rand_float(-0.15, 0.15, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
 
         self.dof_pos_bez[env_ids] = tensor_clamp(self.default_dof_pos[env_ids] + positions_offset,
                                                  self.dof_pos_limits_lower, self.dof_pos_limits_upper)
         self.dof_vel_bez[env_ids] = velocities
+
+        # goal pos randomization
+        # goal_x = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
+        # goal_y = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
+        #
+        # self.goal[env_ids, 0] = goal_x[0]
+        # self.goal[env_ids, 1] = goal_y[0]
+        # if self.debug_rewards:
+        #     self.gym.clear_lines(self.viewer)
+        #     # print(goal_y[0].tolist()[0])
+        #     line_p = [
+        #         0,
+        #         0,
+        #         0,
+        #         goal_x[0].tolist()[0],
+        #         goal_y[0].tolist()[0],
+        #         0
+        #     ]
+        #
+        #     self.gym.add_lines(self.viewer, self.envs[env_ids], 2, line_p, [1, 0, 0])
+        # ball pos randomization
+        # ball_x = torch_rand_float(0.175, 0.2, (len(env_ids), 1), device=self.device)
+        # ball_y = torch_rand_float(-0.05, 0.05, (len(env_ids), 1), device=self.device)
+        # print("ball: ", ball_x, ball_y)
+        # print("goal: ", goal_x, goal_y)
+        # print(ball_indices)
+        # print(env_ids)
+        # self.initial_root_states[ball_indices, 0] = ball_x[0]
+        # self.initial_root_states[ball_indices, 1] = ball_y[0]
+        # self.ball_init[env_ids, 0] = ball_x[0]
+        # self.ball_init[env_ids, 1] = ball_y[0]
 
         bez_indices = self.bez_indices[env_ids].to(dtype=torch.int32)
 
@@ -659,17 +700,7 @@ def compute_off_orn(
     z = root_orient_bez[..., 2]
     w = root_orient_bez[..., 3]
 
-    # yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y ** 2 + z ** 2))
-    wz = torch.mul(w, z)
-    xy = torch.mul(x, y)
-    yy = torch.mul(y, y)
-    zz = torch.mul(z, z)
-    wz_xy = torch.add(wz, xy)
-    wz_xy_2 = torch.mul(2, wz_xy)
-    yy_zz = torch.add(yy, zz)
-    yy_zz_2 = torch.mul(2, yy_zz)
-    yy_zz_2_1 = torch.sub(1, yy_zz_2)
-    yaw = torch.atan2(wz_xy_2, yy_zz_2_1)
+    roll, pitch, yaw = get_euler_xyz(root_orient_bez[..., 0:4])
     cos = torch.cos(yaw)
     sin = torch.sin(yaw)
     d2_vect = torch.cat((cos.reshape((-1, 1)), sin.reshape((-1, 1))), dim=-1)
@@ -713,19 +744,20 @@ def compute_feet_sensors_no_cleats(
 
     # x sign
     x = torch.where(
-        torch.abs(foot_contact_forces[..., 0:1]) > 0.0, ones, zeros)
-    x = torch.where(foot_contact_forces[..., 0:1] == 0, 2.0 * ones, x)
+        torch.abs(foot_contact_forces[..., 0]) > 0.0, ones, zeros)
+    x = torch.where(foot_contact_forces[..., 0] == 0, 2.0 * torch.ones_like(ones), x)
 
     # y sign
     y = torch.where(
-        torch.abs(foot_contact_forces[..., 1:2]) > 0.0, ones,
-        3.0 * ones)
-    y = torch.where(foot_contact_forces[..., 1:2] == 0, 3.0 * ones, y)
+        torch.abs(foot_contact_forces[..., 1]) > 0.0, ones,
+        3.0 * torch.ones_like(ones))
+    y = torch.where(foot_contact_forces[..., 1] == 0, 3.0 * torch.ones_like(ones), y)
 
     # Determining sensors used
-    sensor = torch.where(x == 1.0, zeros, 4.0 * ones)  # Is x positive
-    sensor = torch.where(x == 2.0, 8.0 * ones, sensor)  # Is x zero
-    case = torch.add(y, sensor)
+    sensor = torch.where(x == 1.0, zeros, 4.0 * torch.ones_like(ones))  # Is x positive
+    sensor = torch.where(x == 2.0, 8.0 * torch.ones_like(ones), sensor)  # Is x zero
+    case = torch.reshape(torch.add(y, sensor), (-1, 1))
+
     forces = torch.where(case == 1.0,
                          forces_case_1,
                          forces)  # Is sensor +,+
@@ -754,7 +786,7 @@ def compute_feet_sensors_no_cleats(
                          forces_case_11,
                          forces)  # Is sensor 0,0
 
-    forces = torch.where(foot_contact_forces[..., 2:3] < 1,
+    forces = torch.where(torch.reshape(foot_contact_forces[..., 2], (-1, 1)) < 1,
                          forces_case_12,
                          forces)  # Is negative force
 
@@ -799,6 +831,7 @@ def compute_bez_reward(
         imu_ang_bez: Tensor,
         root_pos_bez: Tensor,
         root_orient_bez: Tensor,
+        up_vec: Tensor,
         goal: Tensor,
         reset_buf: Tensor,
         progress_buf: Tensor,
@@ -807,18 +840,24 @@ def compute_bez_reward(
         # left_contact_forces: Tensor,
         # right_contact_forces: Tensor,
         max_episode_length: int,
+        num_envs: int,
         dt: float,
+        debug_rewards: bool
 
-) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
+) -> Tuple[Tensor, Tensor]:  # (reward, reset)
     # Calculate Velocity direction field
     distance_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])  # nx2
     distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)  # 2xn / nx1 = nx2
+    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
     velocity_forward_reward = torch.sum(torch.mul(distance_unit_vec, imu_lin_bez[..., 0:2]), dim=-1)
 
-    DESIRED_HEIGHT = 0.325  # Height of ready position
+    up_vec = get_basis_vector(root_orient_bez[..., 0:4], up_vec).view(num_envs, 3)
+    up_proj = up_vec[:, 2]
+
+    DESIRED_HEIGHT = 1  # Height of ready position
 
     # reward
+
     # old
     vel_bez = torch.cat((imu_lin_bez, imu_ang_bez), dim=1)
     vel_reward = torch.linalg.norm(vel_bez, dim=1)
@@ -826,8 +865,10 @@ def compute_bez_reward(
     vel_lin_reward = torch.linalg.norm(imu_lin_bez, dim=1)
     vel_ang_reward = torch.linalg.norm(imu_ang_bez, dim=1)
     # vel_reward = torch.add(vel_lin_reward, vel_ang_reward)
+
     pos_reward = torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
-    distance_to_height = torch.abs(DESIRED_HEIGHT - root_pos_bez[..., 2])
+    distance_to_height = torch.abs(DESIRED_HEIGHT - up_proj)
+    distance_to_height_scaled = torch.mul(distance_to_height, 1)
 
     # Feet reward
     ground_feet = torch.sum(feet, dim=1)
@@ -870,10 +911,9 @@ def compute_bez_reward(
         # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
 
         # 0.1 velocity_forward_reward - distance_to_height
-        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 1)
+        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 10)
         vel_height_reward = torch.add(velocity_forward_reward_scaled, distance_to_height)
         vel_height_reward_scaled = torch.mul(vel_height_reward, 1)
-
 
     # print("vel_ang_reward: ",float(vel_ang_reward[0]))
     # print("vel_lin_reward: ",float(vel_lin_reward[0]))
@@ -891,21 +931,13 @@ def compute_bez_reward(
 
     # Reset
     ones = torch.ones_like(reset_buf)
-    reset = torch.zeros_like(reset_buf)
+    termination_scale = -1.0
 
     # Fall
-    reset = torch.where(root_pos_bez[..., 2] < 0.275, ones, reset)
-    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * -100.0, reward) # -100
+    reset = torch.where(up_proj < 0.7, ones, reset_buf)
+    reward = torch.where(up_proj < 0.7, torch.ones_like(reward) * -100.0, reward)  # -100
 
     # Close to the Goal
-
-    # distance_traveled = torch.sub(root_pos_bez[..., 0:2], bez_init_state)  # nx2
-    # distance_traveled_norm = torch.reshape(torch.linalg.norm(distance_traveled, dim=1), (-1, 1))
-    # average_velocity_norm = torch.reshape(torch.linalg.norm(imu_lin_bez[..., 0:2], dim=1), (-1, 1))
-    # print("distance_to_goal_norm: ", float(distance_to_goal_norm[0]))
-    # print("distance_traveled: ", float(distance_traveled_norm[0]), " Time elapsed: ", float((progress_buf)[0] * dt))
-    # print("average_velocity: ", float(distance_traveled_norm[0])/float((progress_buf)[0] * dt))
-    # print("current_velocity: ", float(average_velocity_norm[0]))
 
     state = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
                         ones,
@@ -930,15 +962,29 @@ def compute_bez_reward(
     reward = torch.where(state == 4.0,
                          torch.ones_like(reward) * (1000.0 - 1000.0 * (progress_buf / max_episode_length)),
                          reward)
+    bez_init_state[..., 0] = 0
+    bez_init_state[..., 1] = 0.0
+    bez_init_to_goal = torch.sub(goal, bez_init_state)  # nx2
+    bez_init_to_goal_norm = torch.reshape(torch.linalg.norm(bez_init_to_goal, dim=1), (-1, 1))
+    bez_init_to_goal_unit_vec = torch.div(bez_init_to_goal, bez_init_to_goal_norm)  # 2xn / nx1 = nx2
+
+    bez_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])  # nx2
+    bez_to_goal_norm = torch.reshape(torch.linalg.norm(bez_to_goal, dim=1), (-1, 1))
+    bez_to_goal_unit_vec = torch.div(bez_to_goal, bez_to_goal_norm)  # 2xn / nx1 = nx2
+
+    bez_to_goal_angle = torch.atan2(bez_to_goal_unit_vec[..., 1], bez_to_goal_unit_vec[..., 0])
+    bez_init_to_goal_angle = torch.atan2(bez_init_to_goal_unit_vec[..., 1], bez_init_to_goal_unit_vec[..., 0])
+    goal_angle_diff = torch.abs((bez_init_to_goal_angle - bez_to_goal_angle))
+    goal_angle_diff = torch.reshape(goal_angle_diff, (-1))
 
     # Out of Bound
-    goal_norm_scaled = torch.mul(torch.linalg.norm(goal.to(dtype=torch.float32)), 2)
+    # print(float(goal_angle_diff[0]), float(distance_to_goal_norm[0]))
     reset = torch.where(
-        distance_to_goal_norm > goal_norm_scaled,
+        goal_angle_diff > 1.5708,
         ones,
         reset)
     reward = torch.where(
-        distance_to_goal_norm > goal_norm_scaled,
+        goal_angle_diff > 1.5708,
         torch.ones_like(reward) * -100.0,
         reward)
 
@@ -947,8 +993,38 @@ def compute_bez_reward(
 
     reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
                          reward)
-    # print(reward)
-    # reset = torch.zeros_like(reset_buf)
+
+    if debug_rewards:
+        distance_to_goal_x = torch.reshape(distance_to_goal[..., 0:1], (-1)).float()
+        distance_to_goal_y = torch.reshape(distance_to_goal[..., 1:2], (-1)).float()
+
+        distance_traveled = torch.sub(root_pos_bez[..., 0:2], bez_init_state)  # nx2
+        distance_traveled_norm = torch.reshape(torch.linalg.norm(distance_traveled, dim=1), (-1, 1))
+        average_velocity_norm = torch.reshape(torch.linalg.norm(imu_lin_bez[..., 0:2], dim=1), (-1, 1))
+
+        print("up_vec: ", float(up_proj[0]))
+
+        print("distance_to_goal_x: ", float(distance_to_goal_x[0]))
+        print("distance_to_goal_y: ", float(distance_to_goal_y[0]))
+        print("distance_to_goal_norm: ", float(distance_to_goal_norm[0]))
+        print("distance_traveled: ", float(distance_traveled_norm[0]), " Time elapsed: ", float((progress_buf)[0] * dt))
+        print("average_velocity: ", float(distance_traveled_norm[0]) / float((progress_buf)[0] * dt))
+        print("current_velocity: ", float(average_velocity_norm[0]))
+
+        # print("ball_vel_height_reward: ", float(ball_vel_height_reward[0]))
+        # print("ball_velocity_forward_reward_scaled: ", float(ball_velocity_forward_reward_scaled_after[0]))
+        print("velocity_forward_reward_scaled: ", float(velocity_forward_reward_scaled[0]))
+        print("vel_reward_scaled: ", float(vel_reward_scaled[0]))
+        print("pos_reward_scaled: ", float(pos_reward_scaled[0]))
+        # print("dof_vel_reward_scaled: ", float(dof_vel_reward_scaled[0]))
+        print("distance_to_height_scaled: ", float(distance_to_height_scaled[0]))
+        # print("goal_angle_diff_scaled: ", float(goal_angle_diff_scaled[0]))
+        print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
+
+        print("feet: ", feet.float())
+        print("reword: ", float(reward[0]))
+
+    # reset = torch.ones_like(reset_buf)
 
     return reward, reset
 
