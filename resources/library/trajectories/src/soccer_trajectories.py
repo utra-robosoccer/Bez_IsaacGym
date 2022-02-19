@@ -93,7 +93,7 @@ class Trajectory:
 
 class SoccerTrajectoryClass:
     def __init__(self, env, env_ids):
-        self.trajectory_path = "/home/manx52/catkin_ws/src/rl-isaac-gym/resources/library/trajectories/trajectories"
+        self.trajectory_path = "//resources/library/trajectories/trajectories"
         self.simulation = True
         self.trajectory_complete = True
         self.env = env

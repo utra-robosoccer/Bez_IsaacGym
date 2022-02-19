@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# utragym
+# bez_isaacgym
 
 from isaacgym import gymutil, gymapi
 from isaacgym.torch_utils import torch_rand_float
@@ -9,9 +9,9 @@ from resources.library.geometry.src.soccer_geometry.transformation import Transf
 from resources.library.pycontrol.src.soccer_pycontrol import soccerbot_controller
 from resources.library.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
 from play import LaunchModel
-from utragym.utils import *
-from utragym.utils.utils import parse_sim_params
-from utragym.tasks.kick_env import KickEnv
+from bez_isaacgym.utils import *
+from bez_isaacgym.utils.utils import parse_sim_params
+from bez_isaacgym.tasks.kick_env import KickEnv
 # python
 import torch
 import os

@@ -2,8 +2,8 @@ import numpy as np
 import os
 import time
 
-from utragym.utils.torch_jit_utils import *
-from utragym.tasks.base.bez_env import BezEnv
+from bez_isaacgym.utils.torch_jit_utils import *
+from bez_isaacgym.tasks.base.bez_env import BezEnv
 from isaacgym import gymtorch
 from isaacgym import gymapi
 
