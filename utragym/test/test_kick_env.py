@@ -5,9 +5,9 @@
 from isaacgym import gymutil, gymapi
 from isaacgym.torch_utils import torch_rand_float
 
-from external.geometry.src.soccer_geometry.transformation import Transformation
-from external.pycontrol.src.soccer_pycontrol import soccerbot_controller
-from external.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
+from resources.library.geometry.src.soccer_geometry.transformation import Transformation
+from resources.library.pycontrol.src.soccer_pycontrol import soccerbot_controller
+from resources.library.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
 from play import LaunchModel
 from utragym.utils import *
 from utragym.utils.utils import parse_sim_params

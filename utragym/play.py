@@ -61,7 +61,7 @@ OmegaConf.register_new_resolver('resolve_default', lambda default, arg: default 
 
 
 class LaunchModel:
-    def __init__(self, checkpoint="runs/Bez_Kick_32/nn/Bez_Kick_32.pth", num_envs=1, env=None):
+    def __init__(self, checkpoint="results/Bez_Kick/Normal/Bez_Kick_33.pth", num_envs=1, env=None):
         initialize(config_path="./cfg")
         self.cfg = compose(config_name="config")
         self.checkpoint = checkpoint
@@ -80,7 +80,7 @@ class LaunchModel:
         if self.cfg.checkpoint:
             self.cfg.checkpoint = to_absolute_path(self.cfg.checkpoint)
 
-        cfg_dict = omegaconf_to_dict(self.cfg)
+        # cfg_dict = omegaconf_to_dict(self.cfg)
         # print_dict(cfg_dict)
         # set numpy formatting for printing only
         set_np_formatting()
