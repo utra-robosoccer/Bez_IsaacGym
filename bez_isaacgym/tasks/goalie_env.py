@@ -2,13 +2,9 @@ import numpy as np
 import os
 import time
 
-<<<<<<< HEAD:bez_isaacgym/tasks/goalie_env.py
 from bez_isaacgym.utils.torch_jit_utils import *
-from bez_isaacgym.tasks.base.bez_env import BezEnv
-=======
-from utragym.utils.torch_jit_utils import *
-from utragym.tasks.base import vec_task
->>>>>>> main:utragym/tasks/goalie_env.py
+from bez_isaacgym.tasks.base.vec_task import vec_task
+
 from isaacgym import gymtorch
 from isaacgym import gymapi
 
