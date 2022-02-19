@@ -130,5 +130,5 @@ dmypy.json
 .pyre/
 
 .idea/
-runs/
-utragym/runs/
+broken_runs/
+bez_isaacgym/runs/
