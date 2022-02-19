@@ -567,24 +567,24 @@ class WalkEnv(VecTask):
         self.dof_vel_bez[env_ids] = velocities
 
         # goal pos randomization
-        # goal_x = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
-        # goal_y = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
-        #
-        # self.goal[env_ids, 0] = goal_x[0]
-        # self.goal[env_ids, 1] = goal_y[0]
-        # if self.debug_rewards:
-        #     self.gym.clear_lines(self.viewer)
-        #     # print(goal_y[0].tolist()[0])
-        #     line_p = [
-        #         0,
-        #         0,
-        #         0,
-        #         goal_x[0].tolist()[0],
-        #         goal_y[0].tolist()[0],
-        #         0
-        #     ]
-        #
-        #     self.gym.add_lines(self.viewer, self.envs[env_ids], 2, line_p, [1, 0, 0])
+        goal_x = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
+        goal_y = torch_rand_float(-2.0, 2.0, (len(env_ids), 1), device=self.device)
+
+        self.goal[env_ids, 0] = goal_x[0]
+        self.goal[env_ids, 1] = goal_y[0]
+        if self.debug_rewards:
+            self.gym.clear_lines(self.viewer)
+            # print(goal_y[0].tolist()[0])
+            line_p = [
+                0,
+                0,
+                0,
+                goal_x[0].tolist()[0],
+                goal_y[0].tolist()[0],
+                0
+            ]
+
+            self.gym.add_lines(self.viewer, self.envs[env_ids], 2, line_p, [1, 0, 0])
         # ball pos randomization
         # ball_x = torch_rand_float(0.175, 0.2, (len(env_ids), 1), device=self.device)
         # ball_y = torch_rand_float(-0.05, 0.05, (len(env_ids), 1), device=self.device)
@@ -896,23 +896,24 @@ def compute_bez_reward(
     else:
         # Variant Walking
         #  - ((distance_to_height + ((.05 * vel_ang_reward + 0.05 * vel_lin_reward) + 0.05 * pos_reward)) - 0.01 * ground_feet)
-        #  height_vel_pos_reward = - distance_to_height - 0.05 * vel_ang_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward - 0.01 * ground_feet
+        #  height_vel_pos_reward = - distance_to_height - 0.05 * vel_ang_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward
         #  height_vel_pos_ang_reward = - distance_to_height  - 0.05 * vel_ang_reward - 0.05 * pos_reward - 0.01 * ground_feet
         scale = 0.05
         vel_reward_scaled = torch.mul(vel_reward, scale)
         vel_ang_reward_scaled = torch.mul(vel_ang_reward, scale)
         pos_reward_scaled = torch.mul(pos_reward, scale)
         vel_pos_reward = torch.add(vel_reward_scaled, pos_reward_scaled)
-        vel_ang_pos_reward = torch.add(vel_ang_reward_scaled, pos_reward)
+        vel_ang_pos_reward = torch.add(vel_ang_reward_scaled, pos_reward_scaled)
         height_vel_pos_reward = -torch.add(vel_pos_reward, distance_to_height)
-        height_vel_pos_ang_reward = -torch.add(vel_ang_pos_reward, distance_to_height)
+        # height_vel_pos_ang_reward = -torch.add(vel_ang_pos_reward, distance_to_height)
         # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
         # height_pos_reward = torch.add(distance_to_height, pos_reward)
         # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
 
-        # 0.1 velocity_forward_reward - distance_to_height
+        # 0.1 velocity_forward_reward - distance_to_height - 0.05 * pos_reward
         velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 10)
-        vel_height_reward = torch.add(velocity_forward_reward_scaled, distance_to_height)
+        height_pos_reward = torch.add(distance_to_height,5* pos_reward_scaled)
+        vel_height_reward = torch.sub(velocity_forward_reward_scaled, height_pos_reward)
         vel_height_reward_scaled = torch.mul(vel_height_reward, 1)
 
     # print("vel_ang_reward: ",float(vel_ang_reward[0]))

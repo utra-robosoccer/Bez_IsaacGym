@@ -44,7 +44,7 @@ headless: False
 
 # set default tasks and default training config based on tasks
 defaults:
-  - task: Cartpole
+  - task: bez_kick
   - train: ${task}PPO
   - hydra/job_logging: disabled
 

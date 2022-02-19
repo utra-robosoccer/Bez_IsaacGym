@@ -116,7 +116,7 @@ env:
     stl: True
 
   debug:
-      rewards: False
+      rewards: True
 
 sim:
   dt: 0.01667 # 1/60 s

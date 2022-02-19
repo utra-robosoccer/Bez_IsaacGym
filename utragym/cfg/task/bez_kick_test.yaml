@@ -15,7 +15,7 @@ env:
     restitution: 0.0  # [-]
 
   bezInitState:
-    pos: [ 0.0, 0.0, 0.37 ] # xyz [m] 0.355 for default or 0.33 for ready
+    pos: [ 0.0, 0.0, 0.34 ] # xyz [m] 0.355 for default or 0.33 for ready
     rot: [0.0, 0.0, 0.0, 1.0] # xyzw [quat]
     # 0.0, 0.0, 0.0, 1.0 for standing up
     # 0, -0.707, 0, -0.707 for flat looking down
@@ -31,7 +31,7 @@ env:
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   goalState:
-    goal: [ 2.0, 0.0]
+    goal: [ 1.5, 0.0]
 
   control:
     # PD Drive parameters:
@@ -126,7 +126,7 @@ env:
     stl: True
 
   debug:
-    rewards: True
+    rewards: False
 
 sim:
   dt: 0.01667 # 1/60 s

@@ -8,6 +8,7 @@ from isaacgym.torch_utils import torch_rand_float
 from external.geometry.src.soccer_geometry.transformation import Transformation
 from external.pycontrol.src.soccer_pycontrol import soccerbot_controller
 from external.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
+from play import LaunchModel
 from utragym.utils import *
 from utragym.utils.utils import parse_sim_params
 from utragym.tasks.kick_env import KickEnv
@@ -223,6 +224,15 @@ class TestBezEnv(unittest.TestCase):
 
             # render the env
             self.env.render()
+
+    """
+    Model environment test
+    """
+
+    def test_model_agent(self):
+        obj = LaunchModel(env=self.env)
+        obj.load_config()
+        obj.run_model()
 
 
 if __name__ == '__main__':

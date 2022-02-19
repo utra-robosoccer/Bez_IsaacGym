@@ -75,7 +75,6 @@ def quat_axis(q, axis=0):
 Normalization and Denormalization of Tensors
 """
 
-
 @torch.jit.script
 def scale_transform(x: torch.Tensor, lower: torch.Tensor, upper: torch.Tensor) -> torch.Tensor:
     """

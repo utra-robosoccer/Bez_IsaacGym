@@ -22,7 +22,7 @@ env:
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   goalState:
-    goal: [ 100.0, 0.0 ]
+    goal: [ 2.0, 0.0 ]
 
   control:
     # PD Drive parameters:
@@ -116,7 +116,7 @@ env:
     stl: True
 
   debug:
-      rewards: True
+      rewards: False
 
 sim:
   dt: 0.01667 # 1/60 s
