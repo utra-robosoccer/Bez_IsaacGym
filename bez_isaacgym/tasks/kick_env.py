@@ -81,6 +81,8 @@ class KickEnv(VecTask):
 
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
+        self.named_joint_limit_high = self.cfg["env"]["JointLimitHigh"]
+        self.named_joint_limit_low = self.cfg["env"]["JointLimitLow"]
 
         # other
         self.max_episode_length_s = self.cfg["env"]["learn"]["episodeLength_s"]
@@ -203,10 +205,14 @@ class KickEnv(VecTask):
         # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos_bez, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
+        self.dof_pos_limits_upper = torch.zeros_like(self.default_dof_pos)
+        self.dof_pos_limits_lower = torch.zeros_like(self.default_dof_pos)
         for i in range(self.cfg["env"]["numActions"]):
             name = self.dof_names[i]
             angle = self.named_default_joint_angles[name]
             self.default_dof_pos[:, i] = angle
+            self.dof_pos_limits_upper[:, i] = self.named_joint_limit_high[name]
+            self.dof_pos_limits_lower[:, i] = self.named_joint_limit_lower[name]
 
         self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
 
@@ -385,25 +391,28 @@ class KickEnv(VecTask):
         self.bez_indices = to_torch(self.bez_indices, dtype=torch.long, device=self.device)
         self.ball_indices = to_torch(self.ball_indices, dtype=torch.long, device=self.device)
 
-        self.dof_pos_limits_lower = []
-        self.dof_pos_limits_upper = []
+
+        #TODO fix
+
+        # self.dof_pos_limits_lower = []
+        # self.dof_pos_limits_upper = []
         self.dof_vel_limits_upper = []
         self.dof_vel_limits_lower = []
 
         dof_prop = self.gym.get_actor_dof_properties(env_ptr, bez_handle)
         for j in range(self.num_dof):
-            if dof_prop['lower'][j] > dof_prop['upper'][j]:
-                self.dof_pos_limits_lower.append(dof_prop['upper'][j])
-                self.dof_pos_limits_upper.append(dof_prop['lower'][j])
-            else:
-                self.dof_pos_limits_lower.append(dof_prop['lower'][j])
-                self.dof_pos_limits_upper.append(dof_prop['upper'][j])
+            # if dof_prop['lower'][j] > dof_prop['upper'][j]:
+            #     self.dof_pos_limits_lower.append(dof_prop['upper'][j])
+            #     self.dof_pos_limits_upper.append(dof_prop['lower'][j])
+            # else:
+            #     self.dof_pos_limits_lower.append(dof_prop['lower'][j])
+            #     self.dof_pos_limits_upper.append(dof_prop['upper'][j])
 
             self.dof_vel_limits_upper.append([self.MX_28_velocity])
             self.dof_vel_limits_lower.append([-self.MX_28_velocity])
 
-        self.dof_pos_limits_lower = to_torch(self.dof_pos_limits_lower, device=self.device)
-        self.dof_pos_limits_upper = to_torch(self.dof_pos_limits_upper, device=self.device)
+        # self.dof_pos_limits_lower = to_torch(self.dof_pos_limits_lower, device=self.device)
+        # self.dof_pos_limits_upper = to_torch(self.dof_pos_limits_upper, device=self.device)
         self.dof_vel_limits_upper = to_torch(self.dof_vel_limits_upper, device=self.device)
         self.dof_vel_limits_lower = to_torch(self.dof_vel_limits_lower, device=self.device)
 

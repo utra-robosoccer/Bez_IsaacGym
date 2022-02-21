@@ -99,7 +99,6 @@ class LaunchModel:
             self.cfg.headless,
             multi_gpu=self.cfg.multi_gpu,
         )
-
         # register the rl-games adapter to use inside the runner
         vecenv.register('RLGPU',
                         lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))

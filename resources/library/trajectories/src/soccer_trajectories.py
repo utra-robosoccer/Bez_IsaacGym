@@ -93,7 +93,7 @@ class Trajectory:
 
 class SoccerTrajectoryClass:
     def __init__(self, env, env_ids):
-        self.trajectory_path = "//resources/library/trajectories/trajectories"
+        self.trajectory_path = "/home/manx52/catkin_ws/src/soccerbot/soccer_rlcontrol/resources/library/trajectories/trajectories"
         self.simulation = True
         self.trajectory_complete = True
         self.env = env
@@ -103,7 +103,7 @@ class SoccerTrajectoryClass:
         path = self.trajectory_path + "/" + "simulation_" + command + ".csv"
 
         if not os.path.exists(path):
-
+            print('Here: ', path)
             return
 
         print("Now publishing: ", command)

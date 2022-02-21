@@ -77,6 +77,46 @@ env:
     head_motor_0: 0.0 # [rad]
     head_motor_1: 0.0 # [rad]
 
+  JointLimitHigh:
+    right_leg_motor_0: 0.524 # [rad]
+    right_leg_motor_1: 1.571 # [rad]
+    right_leg_motor_2: 2.356 # [rad]
+    right_leg_motor_3: 0 # [rad]
+    right_leg_motor_4: 1.571 # [rad]
+    right_leg_motor_5: 0.785 # [rad]
+    left_leg_motor_0: 0.524 # [rad]
+    left_leg_motor_1: 1.571 # [rad]
+    left_leg_motor_2: 2.356 # [rad]
+    left_leg_motor_3: 0 # [rad]
+    left_leg_motor_4: 1.571 # [rad]
+    left_leg_motor_5: 0.785 # [rad]
+    right_arm_motor_0: 3.927 # [rad]
+    right_arm_motor_1: 3.142 # [rad]
+    left_arm_motor_0: 3.927 # [rad]
+    left_arm_motor_1: 3.142 # [rad]
+    head_motor_0: 1.571 # [rad]
+    head_motor_1: 2.356 # [rad]
+
+  JointLimitLow:
+    right_leg_motor_0: -1.309 # [rad]
+    right_leg_motor_1: -0.785 # [rad]
+    right_leg_motor_2: -0.785 # [rad]
+    right_leg_motor_3: -2.793 # [rad]
+    right_leg_motor_4: -0.785 # [rad]
+    right_leg_motor_5: -0.785 # [rad]
+    left_leg_motor_0: -1.309 # [rad]
+    left_leg_motor_1: -0.785 # [rad]
+    left_leg_motor_2: -0.785 # [rad]
+    left_leg_motor_3: -2.793 # [rad]
+    left_leg_motor_4: -0.785 # [rad]
+    left_leg_motor_5: -0.785 # [rad]
+    right_arm_motor_0: -1.571 # [rad]
+    right_arm_motor_1: 0 # [rad]
+    left_arm_motor_0: -1.571 # [rad]
+    left_arm_motor_1: 0 # [rad]
+    head_motor_0: -1.571 # [rad]
+    head_motor_1: -2.356 # [rad]
+
   urdfAsset:
     collapseFixedJoints: False
     fixBaseLink: false

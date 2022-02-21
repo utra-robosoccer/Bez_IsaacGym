@@ -19,6 +19,7 @@ INSTALL_REQUIRES = [
     "omegaconf",
     "hydra-core>=1.1",
     "rl-games==1.1.3",
+    "PyYAML",
 ]
 
 # Installation operation

@@ -6,7 +6,6 @@ from resources.library.pycontrol.src.soccer_pycontrol import soccerbot_controlle
 from resources.library.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
 from play import LaunchModel
 
-from bez_isaacgym.utils.utils import parse_sim_params
 from bez_isaacgym.tasks.kick_env import KickEnv
 # python
 import torch
@@ -59,9 +58,6 @@ class TestBezEnv(unittest.TestCase):
             description="RL Policy",
             custom_parameters=custom_parameters
         )
-
-        # Getting sim params
-        sim_params = parse_sim_params(args, cfg, cfg_train)
 
         # create environment
         self.env = KickEnv(cfg=cfg, sim_device=args.sim_device,
@@ -222,7 +218,7 @@ class TestBezEnv(unittest.TestCase):
             self.env.render()
 
     """
-    Model environment test
+    Trained Model environment test
     """
 
     def test_model_agent(self):
