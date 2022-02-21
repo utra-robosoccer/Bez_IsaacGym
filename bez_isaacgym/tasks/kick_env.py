@@ -212,7 +212,7 @@ class KickEnv(VecTask):
             angle = self.named_default_joint_angles[name]
             self.default_dof_pos[:, i] = angle
             self.dof_pos_limits_upper[:, i] = self.named_joint_limit_high[name]
-            self.dof_pos_limits_lower[:, i] = self.named_joint_limit_lower[name]
+            self.dof_pos_limits_lower[:, i] = self.named_joint_limit_low[name]
 
         self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
 

@@ -22,6 +22,7 @@ class Trajectory:
         self.time_to_last_pose = 1  # seconds
         self.env = env
         self.env_ids = env_ids
+
         with open(os.path.join(os.getcwd(), 'cfg/task/bez_kick_test.yaml'), 'r') as f:
             self.cfg = yaml.load(f, Loader=yaml.SafeLoader)
 
@@ -93,7 +94,7 @@ class Trajectory:
 
 class SoccerTrajectoryClass:
     def __init__(self, env, env_ids):
-        self.trajectory_path = "/home/manx52/catkin_ws/src/soccerbot/soccer_rlcontrol/resources/library/trajectories/trajectories"
+        self.trajectory_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + "/trajectories"
         self.simulation = True
         self.trajectory_complete = True
         self.env = env
