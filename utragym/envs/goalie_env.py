@@ -141,6 +141,7 @@ class GoalieEnv(BezEnv):
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
         self.goal = torch.tensor([[1, 0]] * self.num_envs, device='cuda:0')
         self.ball_init = torch.tensor([self.ball_init_state[0:2]] * self.num_envs, device='cuda:0')
+        self.bez_init = torch.tensor([self.bez_init_state[0:2]] * self.num_envs, device='cuda:0')
         self.initial_root_states = self.root_states.clone()
         self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state] * self.num_envs,
                                                device=self.device, requires_grad=False)
@@ -462,6 +463,7 @@ class GoalieEnv(BezEnv):
             self.root_pos_ball,
             self.root_vel_ball,
             self.goal,
+            self.bez_init,
             self.ball_init,
             self.reset_buf,
             self.progress_buf,
@@ -535,6 +537,7 @@ def compute_bez_reward(
         root_pos_ball: Tensor,
         root_vel_ball: Tensor,
         goal: Tensor,
+        bez_init: Tensor,
         ball_init: Tensor,
         reset_buf: Tensor,
         progress_buf: Tensor,
@@ -546,42 +549,21 @@ def compute_bez_reward(
     distance_to_ball_norm = torch.reshape(torch.linalg.norm(distance_to_ball, dim=1), (-1, 1))
     distance_unit_vec = torch.div(distance_to_ball, distance_to_ball_norm)  # 2xn / nx1 = nx2
 
-    velocity_forward_reward = torch.sum(distance_unit_vec * imu_lin_bez[..., 0:2], dim=-1)
-
-    distance_to_goal = torch.sub(goal, root_pos_ball[..., 0:2])
-    distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
-
     ball_velocity_forward_reward = torch.sum(distance_unit_vec * root_vel_ball[..., 0:2], dim=-1)
     ball_velocity_norm = torch.reshape(torch.linalg.norm(root_vel_ball[..., 0:2], dim=1), (-1, 1))
 
-    DESIRED_HEIGHT = 0.27  # seems arbitrary
+    goalline_to_ball = torch.sub(root_pos_ball[..., 0:2], bez_init[..., 0:2])  # nx2
+    goalline_to_ball_norm = torch.reshape(torch.linalg.norm(goalline_to_ball, dim=1), (-1, 1))
+    goalline_unit_vec = torch.div(goalline_to_ball, goalline_to_ball_norm)  # 2xn / nx1 = nx2
 
     # reward
     vel_reward = 0.05 * torch.linalg.norm(imu_ang_bez, dim=1)
     pos_reward = 0.05 * torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
-    distance_to_height = DESIRED_HEIGHT - root_pos_bez[..., 2]
-    distance_kicked = torch.linalg.norm(torch.sub(root_pos_ball[..., 0:2], ball_init), dim=1)
-    # print('here ',vel_reward.shape,pos_reward.shape,distance_to_height.shape,ball_velocity_forward_reward.shape,
-    # velocity_forward_reward.shape)
 
-    #  0.2 * ball_velocity_forward_reward - distance_to_height - vel_reward - pos_reward
     vel_pos_reward = torch.sub(vel_reward, pos_reward)
-    height_vel_pos_reward = torch.sub(distance_to_height, vel_pos_reward)
-    ball_velocity_forward_reward_scaled = torch.mul(ball_velocity_forward_reward, 0.2)
-    ball_height_vel_pos_reward = torch.sub(ball_velocity_forward_reward_scaled, height_vel_pos_reward)
 
-    # 0.2 * ball_velocity_forward_reward + 0.05 * velocity_forward_reward - distance_to_height
-    velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.05)
-    vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
-    ball_vel_height_reward = torch.add(ball_velocity_forward_reward_scaled, vel_height_reward)
+    reward = vel_pos_reward
 
-    reward = torch.where(distance_kicked > 0.3,
-                         ball_height_vel_pos_reward,
-                         ball_vel_height_reward
-                         )
-    # print('start: ', reward)
-    # Reset
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
 
@@ -599,33 +581,17 @@ def compute_bez_reward(
     #                      reward)
 
     # =====================================
-    # Out of Bound
-    # if torch.linalg.norm(root_pos_ball[..., 0:2] - goal) > 3 * torch.linalg.norm(goal.to(dtype=torch.float32)):
-    #     print('Out of Bound')
-    # =====================================
-
-    # goal_norm_scaled = torch.mul(torch.linalg.norm(goal.to(dtype=torch.float32)), 3)
-    # reset = torch.where(
-    #     distance_to_goal_norm > goal_norm_scaled,
-    #     ones,
-    #     reset)
-    # reward = torch.where(
-    #     distance_to_goal_norm > goal_norm_scaled,
-    #     torch.ones_like(reward) * -10000,
-    #     reward)
-
-    # =====================================
     # Failed to stop the ball
     # if torch.linalg.norm(root_pos_ball[..., 0:2] - goal) > 3 * torch.linalg.norm(goal.to(dtype=torch.float32)):
     #     print('Out of Bound')
     # =====================================
 
     reset = torch.where(
-        distance_to_ball[..., 0] < 0,
+        goalline_to_ball[..., 0] < 0,
         ones,
         reset)
     reward = torch.where(
-        distance_to_ball[..., 0] < 0,
+        goalline_to_ball[..., 0] < 0,
         torch.ones_like(reward) * -10000.0,
         reward)
 
@@ -633,8 +599,15 @@ def compute_bez_reward(
     # if ball stopped:
     #     print('Ball Stopped')
     # =====================================
+
+    reward = torch.where(
+        ball_velocity_norm[..., 0] < 0.05,
+        torch.ones_like(reward) * goalline_to_ball[..., 0],
+        reward)
+
     reset = torch.where(ball_velocity_norm[..., 0] < 0.05, ones,
                         reset)
+
 
     # =====================================
     # if progress_buf >= max_episode_length:
@@ -645,7 +618,7 @@ def compute_bez_reward(
     reset = torch.where(progress_buf >= max_episode_length, ones, reset)
     reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
                          reward)
-    # print(reward)
+
     return reward, reset
 
 

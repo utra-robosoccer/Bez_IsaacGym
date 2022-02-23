@@ -1,6 +1,6 @@
 # if given will override the device setting in gym. 
 env:
-  numEnvs: 10 # 10 4096
+  numEnvs: 4096 # 10 4096
   envSpacing: 3 # [m]
 
   plane:
@@ -17,7 +17,7 @@ env:
   ballInitState:
     pos: [ 2, 0, 0.1 ] # xyz [m]
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
-    vLinear: [ -10.0, 0.0, 0.0 ]  # xyz [m/s]
+    vLinear: [ -5.0, 0.5, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   control:
