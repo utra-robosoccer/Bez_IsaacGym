@@ -1,5 +1,5 @@
 # used to create the object
-name: bez_kick
+name: bez_stabilize
 
 physics_engine: ${..physics_engine}
 

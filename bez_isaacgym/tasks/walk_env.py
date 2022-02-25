@@ -603,10 +603,6 @@ class WalkEnv(VecTask):
                                                      gymtorch.unwrap_tensor(self.initial_root_states),
                                                      gymtorch.unwrap_tensor(bez_indices), len(bez_indices))
 
-        self.gym.set_dof_position_target_tensor_indexed(self.sim,
-                                                        gymtorch.unwrap_tensor(self.default_dof_pos),
-                                                        gymtorch.unwrap_tensor(bez_indices),
-                                                        len(bez_indices))
 
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
