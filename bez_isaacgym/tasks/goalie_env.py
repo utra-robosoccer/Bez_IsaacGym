@@ -1,17 +1,24 @@
-import numpy as np
 import os
 import time
+import math
+import sys
 
-from bez_isaacgym.utils.torch_jit_utils import *
-from bez_isaacgym.tasks.base.vec_task import vec_task
+from matplotlib import pyplot as plt
 
+from utils.torch_jit_utils import *
+from .base.vec_task import VecTask
 from isaacgym import gymtorch
 from isaacgym import gymapi
+import numpy as np
 
 import torch
 from torch._tensor import Tensor
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 import enum
+
+import matplotlib
+
+matplotlib.use("TkAgg")
 
 
 class Joints(enum.IntEnum):
@@ -35,14 +42,15 @@ class Joints(enum.IntEnum):
     RIGHT_LEG_6 = 17
 
 
-class GoalieEnv(vec_task):
+class GoalieEnv(VecTask):
 
-    def __init__(self, cfg, sim_params, physics_engine, device_type, device_id, headless):
-        self.randomize = False
+    def __init__(self, cfg, sim_device, graphics_device_id, headless):
         # Setup
         self.cfg = cfg
-        self.sim_params = sim_params
-        self.physics_engine = physics_engine
+
+        # randomization
+        self.randomization_params = self.cfg["task"]["randomization_params"]
+        self.randomize = self.cfg["task"]["randomize"]
 
         # plane params
         self.plane_static_friction = self.cfg["env"]["plane"]["staticFriction"]
@@ -54,7 +62,6 @@ class GoalieEnv(vec_task):
         rot = self.cfg["env"]["bezInitState"]["rot"]
         v_lin = self.cfg["env"]["bezInitState"]["vLinear"]
         v_ang = self.cfg["env"]["bezInitState"]["vAngular"]
-
         self.bez_init_state = pos + rot + v_lin + v_ang
 
         # ball base init state
@@ -64,18 +71,19 @@ class GoalieEnv(vec_task):
         v_ang = self.cfg["env"]["ballInitState"]["vAngular"]
         self.ball_init_state = pos + rot + v_lin + v_ang
 
+        # model choice
+        self.cleats = self.cfg["env"]["asset"]["cleats"]
+
+        # debug
+        self.debug_rewards = self.cfg["env"]["debug"]["rewards"]
+
         # default joint positions
         self.named_default_joint_angles = self.cfg["env"]["readyJointAngles"]  # defaultJointAngles  readyJointAngles
 
         # other
-        self.dt = sim_params.dt
         self.max_episode_length_s = self.cfg["env"]["learn"]["episodeLength_s"]
-        self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
         self.Kp = self.cfg["env"]["control"]["stiffness"]
         self.Kd = self.cfg["env"]["control"]["damping"]
-
-        # for key in self.rew_scales.keys():
-        #     self.rew_scales[key] *= self.dt
 
         # Observation dimension
         self.orn_dim = 2
@@ -83,16 +91,13 @@ class GoalieEnv(vec_task):
         self.feet_dim = 8
         self.dof_dim = 18  # or 16 if we remove head
         self.rnn_dim = 1
-        self.ball_dim = 2  # ball distance
+        self.ball_dim = 2  # ball position
 
         # Limits
         self.imu_max_ang_vel = 8.7266
         self.imu_max_lin_acc = 2. * 9.81
         self.AX_12_velocity = (59 / 60) * 2 * np.pi  # Ask sharyar for later - 11.9 rad/s
         self.MX_28_velocity = 2 * np.pi  # 24.5 rad/s
-        self.orn_limit = torch.tensor([1.] * self.orn_dim, device='cuda:0')
-        self.feet_limit = torch.tensor([1.6] * self.feet_dim, device='cuda:0')
-        self.ball_start_limit = torch.tensor([0.3] * self.ball_dim, device='cuda:0')
 
         # IMU NOISE
         self._IMU_LIN_STDDEV_BIAS = 0.  # 0.02 * _MAX_LIN_ACC
@@ -107,17 +112,25 @@ class GoalieEnv(vec_task):
         self._JOIN_ANGLE_STDDEV = np.pi / 2048
         self._JOIN_VELOCITY_STDDEV = self._JOIN_ANGLE_STDDEV / 120
 
-        self.cfg["env"]["numObservations"] = 54  # self.dof_dim + self.imu_dim + self.orn_dim + self.ball_dim  # 30
+        # Number of observation and actions
+        self.cfg["env"][
+            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.orn_dim + self.feet_dim + self.ball_dim  # 54
         self.cfg["env"]["numActions"] = self.dof_dim
 
-        self.cfg["device_type"] = device_type
-        self.cfg["device_id"] = device_id
-        self.cfg["headless"] = headless
+        super().__init__(config=self.cfg, sim_device=sim_device, graphics_device_id=graphics_device_id,
+                         headless=headless)
 
-        super().__init__(cfg=self.cfg)
+        # simulation parameters
+        self.dt = self.sim_params.dt
+        self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
+
+        # TODO Implement
+        self.orn_limit = torch.tensor([1.] * self.orn_dim, device=self.device)
+        self.feet_limit = torch.tensor([1.6] * self.feet_dim, device=self.device)
+        self.ball_start_limit = torch.tensor([0.3] * self.ball_dim, device=self.device)
 
         # camera view
-        if self.viewer != None:
+        if self.viewer is not None:
             p = self.cfg["env"]["viewer"]["pos"]
             lookat = self.cfg["env"]["viewer"]["lookat"]
             cam_pos = gymapi.Vec3(p[0], p[1], p[2])
@@ -140,27 +153,51 @@ class GoalieEnv(vec_task):
         self.root_states = gymtorch.wrap_tensor(actor_root_state)
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
-        self.goal = torch.tensor([[1, 0]] * self.num_envs, device='cuda:0')
-        self.ball_init = torch.tensor([self.ball_init_state[0:2]] * self.num_envs, device='cuda:0')
-        self.bez_init = torch.tensor([self.bez_init_state[0:2]] * self.num_envs, device='cuda:0')
+
+        self.bez_init_xy = torch.tensor(self.bez_init_state[0:2], device=self.device)
+        self.ball_init = torch.tensor([self.ball_init_state[0:2]], device=self.device).repeat((self.num_envs, 1))
+        self.ball_init_vel = torch.tensor([self.ball_init_state[7:9]], device=self.device).repeat((self.num_envs, 1))
+
         self.initial_root_states = self.root_states.clone()
-        self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state] * self.num_envs,
-                                               device=self.device, requires_grad=False)
-        # self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
-        self.dof_pos_bez = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
-        self.dof_vel_bez = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
-        self.root_pos_bez = self.root_states.view(self.num_envs, 2, 13)[..., 0, 0:3]
-        self.root_orient_bez = self.root_states.view(self.num_envs, 2, 13)[..., 0, 3:7]
-        self.root_pos_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 0:3]
-        self.root_orient_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 3:7]
-        self.root_vel_ball = self.root_states.view(self.num_envs, 2, 13)[..., 1, 7:10]
-        self.root_vel_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1,
-                            7:10]
-        self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1,
-                            10:13]
-        self.prev_lin_vel = torch.tensor([0, 0, 0], device='cuda:0')
-        self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17, 0:3]
-        self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29, 0:3]
+        self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state],
+                                               device=self.device, requires_grad=False).repeat((self.num_envs, 1))
+        self.initial_root_states[:, 7:13] = 0
+
+        self.dof_pos_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 0]
+        self.dof_vel_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 1]
+
+        self.root_pos_bez = self.root_states.view(self.num_envs, -1, 13)[..., 0, 0:3]
+        # self.root_orient_bez = self.root_states.view(self.num_envs, -1, 13)[..., 0, 3:7]
+
+        # Imu link
+        self.root_orient_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 3:7]
+        self.root_vel_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 7:10]
+        self.root_ang_bez = self.rigid_body.view(self.num_envs, -1, 13)[..., 1, 10:13]
+
+        self.root_pos_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 0:3]
+        self.root_orient_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 3:7]
+        self.root_vel_ball = self.root_states.view(self.num_envs, -1, 13)[..., 1, 7:10]
+
+        self.prev_lin_vel = torch.tensor([[0, 0, 0]], device=self.device).repeat((self.num_envs, 1))
+
+        self.feet = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))
+
+        if self.cleats:
+            self.left_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 13:17,
+                                       0:3]
+            self.right_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 25:29,
+                                        0:3]
+        else:
+            self.left_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 12,
+                                            0:3]
+            self.right_foot_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[...,
+                                             20, 0:3]
+
+        # self.left_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3)[..., 6,
+        # 0:3]
+        # self.right_arm_contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
+        # 3)[..., 18,0:3]
+
         # Setting default positions
         self.default_dof_pos = torch.zeros_like(self.dof_pos_bez, dtype=torch.float, device=self.device,
                                                 requires_grad=False)
@@ -169,14 +206,33 @@ class GoalieEnv(vec_task):
             angle = self.named_default_joint_angles[name]
             self.default_dof_pos[:, i] = angle
 
+        self.num_dofs = self.gym.get_sim_dof_count(self.sim) // self.num_envs
+
         # initialize some data used later on
-        self.extras = {}
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device,
                                    requires_grad=False)
-        self.time_out_buf = torch.zeros_like(self.reset_buf)
+        self.inv_start_rot = quat_conjugate(self.start_rotation).repeat((self.num_envs, 1))
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
             (self.num_envs, 1))
-        self.reset(torch.arange(self.num_envs, device=self.device))
+        self.up_vec = to_torch(get_axis_params(1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
+
+        self.time = []
+        self.kick_vel = []
+        self.up_proj = []
+        self.distance_kicked_norm = []
+        self.vel_reward_scaled = []
+        self.pos_reward_scaled = []
+        self.max_kick_velocity = 0.0
+
+        if self.debug_rewards:
+            self.fig, self.ax = plt.subplots(2, 3)
+
+            self.fig.show()
+
+            # We need to draw the canvas before we start animating...
+            self.fig.canvas.draw()
+
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
     def create_sim(self):
         self.up_axis_idx = self.set_sim_params_up_axis(self.sim_params, 'z')
@@ -184,6 +240,9 @@ class GoalieEnv(vec_task):
 
         self._create_ground_plane()
         self._create_envs(self.num_envs, self.cfg["env"]['envSpacing'], int(np.sqrt(self.num_envs)))
+        # If randomizing, apply once immediately on startup before the first sim step
+        if self.randomize:
+            self.apply_randomizations(self.randomization_params)
 
     def _create_ground_plane(self):
         plane_params = gymapi.PlaneParams()
@@ -195,13 +254,23 @@ class GoalieEnv(vec_task):
 
     def _create_envs(self, num_envs, spacing, num_per_row):
         asset_root = "../../assets"
-        asset_file_bez = "bez/model/soccerbot_box.urdf"
+        asset_file_bez = "bez/model/soccerbot_box_sensor.urdf"
         asset_file_ball = "bez/objects/ball.urdf"
 
         if "asset" in self.cfg["env"]:
             asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
-            asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBez", asset_file_bez)
             asset_file_ball = self.cfg["env"]["asset"].get("assetFileNameBall", asset_file_ball)
+
+            if self.cfg["env"]["asset"]["stl"]:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStlSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezStl", asset_file_bez)
+            else:
+                if self.cleats:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBoxSensor", asset_file_bez)
+                else:
+                    asset_file_bez = self.cfg["env"]["asset"].get("assetFileNameBezBox", asset_file_bez)
 
         asset_path = os.path.join(asset_root, asset_file_bez)
         asset_path_ball = os.path.join(asset_root, asset_file_ball)
@@ -220,6 +289,12 @@ class GoalieEnv(vec_task):
         asset_options.armature = self.cfg["env"]["urdfAsset"]["armature"]
         asset_options.thickness = self.cfg["env"]["urdfAsset"]["thickness"]
         asset_options.disable_gravity = self.cfg["env"]["urdfAsset"]["disable_gravity"]
+        # asset_options.override_com = True
+        # asset_options.override_inertia = True
+        # asset_options.vhacd_enabled = True
+        # asset_options.vhacd_params.resolution = 300000
+        # asset_options.vhacd_params.max_convex_hulls = 10
+        # asset_options.vhacd_params.max_num_vertices_per_ch = 64
 
         bez_asset = self.gym.load_asset(self.sim, asset_root, asset_file_bez, asset_options)
         self.num_dof = self.gym.get_asset_dof_count(bez_asset)
@@ -227,20 +302,19 @@ class GoalieEnv(vec_task):
 
         start_pose = gymapi.Transform()
         start_pose.p = gymapi.Vec3(*self.bez_init_state[:3])
-
+        start_pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+        self.start_rotation = torch.tensor([start_pose.r.x, start_pose.r.y, start_pose.r.z, start_pose.r.w],
+                                           device=self.device)
         self.dof_names = self.gym.get_asset_dof_names(bez_asset)
-        self.base_index = 0
 
         actuator_props = self.gym.get_asset_dof_properties(bez_asset)
-
-        motor_efforts = [prop['effort'] for prop in actuator_props]
-
-        self.max_motor_effort = to_torch(motor_efforts, device=self.device)
-        self.min_motor_effort = -1 * to_torch(motor_efforts, device=self.device)
 
         self.num_bodies = self.gym.get_asset_rigid_body_count(bez_asset)
         self.num_dof = self.gym.get_asset_dof_count(bez_asset)
         self.num_joints = self.gym.get_asset_joint_count(bez_asset)
+
+        self.actuated_dof_indices = [self.gym.find_asset_dof_index(bez_asset, name) for name in
+                                     self.dof_names]
 
         for i in range(self.num_dof):
             actuator_props['driveMode'][i] = self.cfg["env"]["urdfAsset"]["defaultDofDriveMode"]
@@ -248,14 +322,15 @@ class GoalieEnv(vec_task):
             actuator_props['damping'][i] = self.Kd
             actuator_props["armature"][i] = self.cfg["env"]["urdfAsset"]["armature"]
             actuator_props["velocity"][i] = self.MX_28_velocity
+            actuator_props['friction'][i] = 0.1
+            actuator_props['effort'][i] = 2.5
 
         asset_root_ball = os.path.dirname(asset_path_ball)
         asset_file_ball = os.path.basename(asset_path_ball)
 
         asset_options_ball = gymapi.AssetOptions()
         asset_options_ball.default_dof_drive_mode = 0
-        asset_options_ball.armature = self.cfg["env"]["urdfAsset"]["armature"]
-
+        asset_options_ball.armature = 0.0  # self.cfg["env"]["urdfAsset"]["armature"]
         ball_asset = self.gym.load_asset(self.sim, asset_root_ball, asset_file_ball, asset_options_ball)
 
         start_pose_ball = gymapi.Transform()
@@ -271,6 +346,7 @@ class GoalieEnv(vec_task):
 
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
+
         self.bez_indices = []
         self.ball_indices = []
         self.bez_handles = []
@@ -291,36 +367,10 @@ class GoalieEnv(vec_task):
             bez_idx = self.gym.get_actor_index(env_ptr, bez_handle, gymapi.DOMAIN_SIM)
             self.bez_indices.append(bez_idx)
 
-            # debugging
-            # name = self.gym.get_actor_name(env_ptr, bez_handle)
-            #
-            # body_names = self.gym.get_actor_rigid_body_names(env_ptr, bez_handle)
-            # body_dict = self.gym.get_actor_rigid_body_dict(env_ptr, bez_handle)
-            #
-            # joint_names = self.gym.get_actor_joint_names(env_ptr, bez_handle)
-            # joint_dict = self.gym.get_actor_joint_dict(env_ptr, bez_handle)
-            #
-            # dof_names = self.gym.get_actor_dof_names(env_ptr, bez_handle)
-            # dof_dict = self.gym.get_actor_dof_dict(env_ptr, bez_handle)
-            #
-            # print()
-            # print("===== Actor: %s =======================================" % name)
-            #
-            # print("\nBodies")
-            # print(body_names)
-            # print(body_dict)
-            #
-            # print("\nJoints")
-            # print(joint_names)
-            # print(joint_dict)
-            #
-            # print("\n Degrees Of Freedom (DOFs)")
-            # print(dof_names)
-            # print(dof_dict)
-
             ball_handle = self.gym.create_actor(env_ptr, ball_asset, start_pose_ball, "ball", i, 0,
                                                 0)
             self.gym.enable_actor_dof_force_sensors(env_ptr, ball_handle)
+
             ball_idx = self.gym.get_actor_index(env_ptr, ball_handle, gymapi.DOMAIN_SIM)
             self.ball_indices.append(ball_idx)
 
@@ -331,8 +381,11 @@ class GoalieEnv(vec_task):
 
         self.bez_indices = to_torch(self.bez_indices, dtype=torch.long, device=self.device)
         self.ball_indices = to_torch(self.ball_indices, dtype=torch.long, device=self.device)
+
         self.dof_pos_limits_lower = []
         self.dof_pos_limits_upper = []
+        self.dof_vel_limits_upper = []
+        self.dof_vel_limits_lower = []
 
         dof_prop = self.gym.get_actor_dof_properties(env_ptr, bez_handle)
         for j in range(self.num_dof):
@@ -343,97 +396,65 @@ class GoalieEnv(vec_task):
                 self.dof_pos_limits_lower.append(dof_prop['lower'][j])
                 self.dof_pos_limits_upper.append(dof_prop['upper'][j])
 
+            self.dof_vel_limits_upper.append([self.MX_28_velocity])
+            self.dof_vel_limits_lower.append([-self.MX_28_velocity])
+
         self.dof_pos_limits_lower = to_torch(self.dof_pos_limits_lower, device=self.device)
         self.dof_pos_limits_upper = to_torch(self.dof_pos_limits_upper, device=self.device)
+        self.dof_vel_limits_upper = to_torch(self.dof_vel_limits_upper, device=self.device)
+        self.dof_vel_limits_lower = to_torch(self.dof_vel_limits_lower, device=self.device)
 
     def pre_physics_step(self, actions):
         # implement pre-physics simulation code here
         #    - e.g. apply actions
         self.actions = actions.clone().to(self.device)
+        self.actions[..., 0:2] = 0.0  # Remove head action
 
-        # computed_torque = self.Kp*(self.actions-self.dof_pos)
-        # computed_torque -= self.Kd*(self.actions-self.dof_vel)
-        # applied_torque = saturate(
-        #     computed_torque,
-        #     lower=self.min_motor_effort,
-        #     upper=self.max_motor_effort
-        # )
-        # action = torch.zeros(applied_torque.size(), dtype=torch.float, device=self.device)
-        # action[0][2] = -10#self.Kp*(3-self.dof_pos[0][2])-self.Kd*(self.dof_vel[0][2])#applied_torque[0][2]
-        # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(action))
-        # self.actions[0][2] = 10
-        targets = self.actions + self.default_dof_pos
+        # Position Control
+        targets = tensor_clamp(self.actions + self.default_dof_pos, self.dof_pos_limits_lower,
+                               self.dof_pos_limits_upper)
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
+
+        # Velocity Control
+        # targets = tensor_clamp(self.actions, self.dof_vel_limits_upper,
+        #                        self.dof_vel_limits_lower)
+        # self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
     def post_physics_step(self):
         # implement post-physics simulation code here
         #    - e.g. compute reward, compute observations
-
         self.progress_buf += 1
+        self.randomize_buf += 1
 
+        # Turn off for testing
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids) > 0:
-            self.reset(env_ids)
+            self.reset_idx(env_ids)
 
         self.compute_observations()
         self.compute_reward(self.actions)
 
     def imu(self):
-        lin_vel = self.root_vel_bez
-        lin_acc = (lin_vel - self.prev_lin_vel) / (self.dt)
-        lin_acc -= self.gravity_vec
-
-        rot_mat = quaternion_to_matrix(self.root_orient_bez)
-
-        lin_acc_transform = torch.matmul(rot_mat, lin_acc.reshape((self.num_envs, -1, 1))).reshape(
-            (self.num_envs, -1,))  # nx3x3 * n*3*1
-        ang_vel = self.root_ang_bez
-
-        self.prev_lin_vel = lin_vel
-
-        lin_acc_clipped = torch.clamp(lin_acc_transform, -self.imu_max_lin_acc, self.imu_max_lin_acc)
-        ang_vel_clipped = torch.clamp(ang_vel, -self.imu_max_ang_vel, self.imu_max_ang_vel)
-
-        imu_val = torch.cat([lin_acc_clipped, ang_vel_clipped], 1)
+        imu_val, self.prev_lin_vel = compute_imu(
+            # tensors
+            self.root_orient_bez,
+            self.root_vel_bez,
+            self.root_ang_bez,
+            self.prev_lin_vel,
+            self.gravity_vec,
+            self.inv_start_rot,
+            # floats
+            self.imu_max_lin_acc,
+            self.imu_max_ang_vel,
+            self.dt,
+            # int
+            self.num_envs
+        )
         return imu_val
 
-    def off_orn(self):
-        distance_to_goal = torch.sub(self.goal, self.root_pos_bez[..., 0:2])
-        distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-        distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
-
-        vec = torch.zeros(self.num_envs, 2, device=self.device)
-        x = self.root_orient_bez[..., 0]
-        y = self.root_orient_bez[..., 1]
-        z = self.root_orient_bez[..., 2]
-        w = self.root_orient_bez[..., 3]
-        wz = torch.mul(w, z)
-        xy = torch.mul(x, y)
-        yy = torch.mul(y, y)
-        zz = torch.mul(z, z)
-        wz_xy = torch.add(wz, xy)
-        wz_xy_2 = torch.mul(2, wz_xy)
-        yy_zz = torch.add(yy, zz)
-        yy_zz_2 = torch.mul(2, yy_zz)
-        yy_zz_2_1 = torch.sub(1, yy_zz_2)
-        yaw = torch.atan2(wz_xy_2, yy_zz_2_1)
-        cos = torch.cos(yaw)
-        sin = torch.sin(yaw)
-        d2_vect = torch.cat((cos.reshape((-1, 1)), sin.reshape((-1, 1))), dim=-1)
-        cos = torch.sum(d2_vect * distance_unit_vec, dim=-1)
-        pad = torch.tensor([0], device=self.device)
-        distance_unit_vec_3d = torch.nn.functional.pad(input=distance_unit_vec, pad=(0, 1, 0, 0), mode='constant',
-                                                       value=0)
-        d2_vect_3d = torch.nn.functional.pad(input=d2_vect, pad=(0, 1, 0, 0), mode='constant',
-                                             value=0)
-        sin = torch.linalg.norm(torch.cross(distance_unit_vec_3d, d2_vect_3d, dim=1), dim=1)
-        vec = torch.cat((sin.reshape((-1, 1)), -cos.reshape((-1, 1))), dim=-1)
-        # print('vec: ', vec.shape, vec)
-
-        return vec
-
-    def feet(self):
+    def feet_sensors_cleats(self):
         """
+        TODO debug weird behavior
         Checks if 4 corners of the each feet are in contact with ground
         Indicies for looking from above on the feet plates:
           Left         Right
@@ -444,12 +465,107 @@ class GoalieEnv(vec_task):
         6-------7    2-------3
         :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
         """
-        forces = torch.tensor(self.num_envs * [[-1.] * self.feet_dim], device=self.device)  # nx8
+        forces = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))  # nx8
         ones = torch.ones_like(forces)
-        left_pts = torch.linalg.norm(self.left_contact_forces.T, dim=0).T  # nx4
-        right_pts = torch.linalg.norm(self.right_contact_forces.T, dim=0).T  # nx4
-        pts = torch.cat((left_pts, right_pts), 1)  # nx8
-        location = torch.where(pts > 1.0, ones, forces)
+
+        location = compute_feet_sensors_cleats(
+            # tensors
+            self.left_contact_forces,
+            self.right_contact_forces,
+            forces,
+            ones
+        )
+
+        # print("self.left_foot_contact_forces: ", self.left_foot_contact_forces)
+        # print("self.right_foot_contact_forces: ", self.right_foot_contact_forces)
+        # print('feet: ', location)
+
+        return location
+
+    def feet_sensors_no_cleats(self):
+        """
+        TODO debug weird behavior
+        Checks if 4 corners of the each feet are in contact with ground
+        Indicies for looking from above on the feet plates:
+          Left         Right
+        4-------5    0-------1
+        |   ^   |    |   ^   |      ^
+        |   |   |    |   |   |      | : forward direction
+        |       |    |       |
+        6-------7    2-------3
+        :return: int array of 8 contact points on both feet, 1: that point is touching the ground -1: otherwise
+        """
+        forces = torch.tensor([[-1.] * 4], device=self.device).repeat((self.num_envs, 1))
+
+        # General tensors
+        ones = torch.ones(1, device=self.device)
+        zeros = torch.zeros(1, device=self.device)
+        zero = torch.zeros(3, device=self.device)
+
+        # Possible sensor configuration
+        forces_case_1 = torch.tensor([1., -1., -1., -1.],
+                                     device=self.device)
+        forces_case_2 = torch.tensor([-1., -1., 1., -1.],
+                                     device=self.device)
+        forces_case_3 = torch.tensor([1., -1., 1., -1.],
+                                     device=self.device)
+        forces_case_5 = torch.tensor([-1., 1., -1., -1.],
+                                     device=self.device)
+        forces_case_6 = torch.tensor([-1., -1., -1., 1.],
+                                     device=self.device)
+        forces_case_7 = torch.tensor([-1., 1., -1., 1.],
+                                     device=self.device)
+        forces_case_9 = torch.tensor([1., 1., -1., -1.],
+                                     device=self.device)
+        forces_case_10 = torch.tensor([-1., -1., 1., 1.],
+                                      device=self.device)
+        forces_case_11 = torch.tensor([1., 1., 1., 1.],
+                                      device=self.device)
+        forces_case_12 = torch.tensor([-1., -1., -1., -1.], device=self.device)
+
+        left_forces = compute_feet_sensors_no_cleats(
+            # tensors
+            self.left_foot_contact_forces,
+            forces,
+            ones,
+            zeros,
+            zero,
+            forces_case_1,
+            forces_case_2,
+            forces_case_3,
+            forces_case_5,
+            forces_case_6,
+            forces_case_7,
+            forces_case_9,
+            forces_case_10,
+            forces_case_11,
+            forces_case_12
+        )
+
+        right_forces = compute_feet_sensors_no_cleats(
+            # tensors
+            self.right_foot_contact_forces,
+            forces,
+            ones,
+            zeros,
+            zero,
+            forces_case_1,
+            forces_case_2,
+            forces_case_3,
+            forces_case_5,
+            forces_case_6,
+            forces_case_7,
+            forces_case_9,
+            forces_case_10,
+            forces_case_11,
+            forces_case_12
+        )
+
+        location = torch.cat((left_forces, right_forces), 1)
+
+        # print("self.left_foot_contact_forces: ", self.left_foot_contact_forces)
+        # print("self.right_foot_contact_forces: ", self.right_foot_contact_forces)
+        # print('feet: ', location)
 
         return location
 
@@ -457,67 +573,105 @@ class GoalieEnv(vec_task):
         self.rew_buf[:], self.reset_buf[:] = compute_bez_reward(
             # tensors
             self.dof_pos_bez,
+            self.dof_vel_bez,
             self.default_dof_pos,
             self.root_vel_bez,
             self.root_ang_bez,
             self.root_pos_bez,
             self.root_orient_bez,
+            self.up_vec,
             self.root_pos_ball,
             self.root_vel_ball,
-            self.goal,
-            self.bez_init,
             self.ball_init,
+            self.ball_init_vel,
+            self.bez_init_xy,
             self.reset_buf,
             self.progress_buf,
-            # int
+            self.feet,
             self.max_episode_length,
-
+            self.num_envs,
         )
+
 
     def compute_observations(self):
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
-        # print(self.dof_pos_bez.shape)
-        # print(self.dof_vel_bez.shape)
-        # print(self.imu().shape)
-        # print(self.off_orn().shape)
-        # print('feet: ', self.feet().shape)
-        # print('ball_init: ',self.ball_init.shape, self.ball_init)
-        self.imu()
+        # print('left_arm_contact_forces: ', self.left_arm_contact_forces, torch.linalg.norm(
+        # self.left_arm_contact_forces.T, dim=0).T) print('right_arm_contact_forces: ',
+        # self.right_arm_contact_forces, torch.linalg.norm(self.right_arm_contact_forces.T, dim=0).T)
+        # up_vec = get_basis_vector(root_orient_bez[..., 0:4], up_vec).view(num_envs, 3)
+        # up_proj = up_vec[:, 2]
+
+        imu = self.imu()
+
+        # self.feet = torch.tensor([[-1.] * self.feet_dim], device=self.device).repeat((self.num_envs, 1))
+        if self.cleats:
+            self.feet = self.feet_sensors_cleats()
+        else:
+            self.feet = self.feet_sensors_no_cleats()
+
         self.obs_buf[:] = compute_bez_observations(
             # tensors
             self.dof_pos_bez,  # 18
             self.dof_vel_bez,  # 18
-            self.imu(),  # 6
-            self.off_orn(),  # 2
-            self.feet(),  # 8
-            self.ball_init  # 2
+            imu,  # 6
+            self.feet,  # 8
+            self.ball_init,  # 2
+            self.ball_init_vel # 2
         )
 
-    def reset(self, env_ids):
+    def reset_idx(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
 
-        positions_offset = torch_rand_float(0, 1, (len(env_ids), self.num_dof), device=self.device)
-        velocities = torch_rand_float(-1, 0, (len(env_ids), self.num_dof), device=self.device)
+        ball_indices = (env_ids * 2) + 1
+        # DOF randomization
+        positions_offset = torch_rand_float(-0.15, 0.15, (len(env_ids), self.num_dof), device=self.device)
+        velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
 
-        self.dof_pos_bez[env_ids] = self.default_dof_pos[env_ids]  # * positions_offset
+        self.dof_pos_bez[env_ids] = tensor_clamp(self.default_dof_pos[env_ids] + positions_offset,
+                                                 self.dof_pos_limits_lower, self.dof_pos_limits_upper)
         self.dof_vel_bez[env_ids] = velocities
 
-        bez_indices = torch.unique(torch.cat([self.bez_indices[env_ids],
-                                              self.ball_indices[env_ids]]).to(torch.int32))
-        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        self.kick_vel = []
+        self.up_proj = []
+        self.goal_angle_diff = []
+        self.distance_kicked_norm = []
+        self.vel_reward_scaled = []
+        self.pos_reward_scaled = []
+        self.time = []
+
+        if self.debug_rewards:
+            self.ax[0, 0].cla()
+            self.ax[0, 1].cla()
+            self.ax[0, 2].cla()
+            self.ax[1, 0].cla()
+            self.ax[1, 1].cla()
+            self.ax[1, 2].cla()
+
+        bez_indices = self.bez_indices[env_ids].to(dtype=torch.int32)
+        ball_indices = self.ball_indices[env_ids].to(dtype=torch.int32)
+
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.initial_root_states),
                                                      gymtorch.unwrap_tensor(bez_indices), len(bez_indices))
 
+        self.gym.set_actor_root_state_tensor_indexed(self.sim,
+                                                     gymtorch.unwrap_tensor(self.initial_root_states),
+                                                     gymtorch.unwrap_tensor(ball_indices), len(ball_indices))
+
+        self.gym.set_dof_position_target_tensor_indexed(self.sim,
+                                                        gymtorch.unwrap_tensor(self.default_dof_pos),
+                                                        gymtorch.unwrap_tensor(bez_indices),
+                                                        len(bez_indices))
+
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
-                                              gymtorch.unwrap_tensor(self.bez_indices.to(dtype=torch.int32)),
-                                              len(env_ids_int32))
+                                              gymtorch.unwrap_tensor(bez_indices),
+                                              len(bez_indices))
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -526,24 +680,211 @@ class GoalieEnv(vec_task):
 #####################################################################
 ###=========================jit functions=========================###
 #####################################################################
-# todo
+@torch.jit.script
+def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
+    """
+    Convert rotations given as quaternions to rotation matrices.
+    Args:
+        quaternions: quaternions with real part first,
+            as tensor of shape (..., 4).
+    Returns:
+        Rotation matrices as tensor of shape (..., 3, 3).
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
+
+
+@torch.jit.script
+def compute_imu(
+        # tensors
+        root_orient_bez: Tensor,
+        root_vel_bez: Tensor,
+        root_ang_bez: Tensor,
+        prev_lin_vel: Tensor,
+        gravity_vec: Tensor,
+        inv_start_rot: Tensor,
+        # floats
+        imu_max_lin_acc: float,
+        imu_max_ang_vel: float,
+        dt: float,
+        # int
+        num_envs: int
+
+) -> Tuple[Tensor, Tensor]:
+    # torso_quat = quat_mul(root_orient_bez, inv_start_rot)
+    #
+    # vel_loc = quat_rotate_inverse(torso_quat, root_vel_bez)
+    # angvel_loc = quat_rotate_inverse(torso_quat, root_ang_bez)
+    #
+    # print("root_orient_bez: ", root_orient_bez)
+    # print("inv_start_rot: ", inv_start_rot)
+    # print("torso_quat: ", torso_quat)
+    # print("vel_loc: ", vel_loc)
+    # print("root_vel_bez: ", root_vel_bez)
+    # print("angvel_loc: ", angvel_loc)
+    # print("root_ang_bez: ", root_ang_bez)
+
+    lin_acc = torch.sub(root_vel_bez, prev_lin_vel)
+    lin_acc = torch.div(lin_acc, dt)
+    lin_acc = torch.sub(lin_acc, gravity_vec)
+
+    rot_mat = quaternion_to_matrix(root_orient_bez)
+    lin_acc_transform = torch.matmul(rot_mat, lin_acc.reshape((num_envs, -1, 1))).reshape(
+        (num_envs, -1,))  # nx3x3 * n*3*1
+
+    lin_acc_clipped = torch.clamp(lin_acc_transform, -imu_max_lin_acc, imu_max_lin_acc)
+    ang_vel_clipped = torch.clamp(root_ang_bez, -imu_max_ang_vel, imu_max_ang_vel)
+    imu_val = torch.cat([lin_acc_clipped, ang_vel_clipped], 1)
+
+    return imu_val, root_vel_bez
+
+
+# No cleats
+@torch.jit.script
+def compute_feet_sensors_no_cleats(
+        # tensors
+        foot_contact_forces: Tensor,
+        forces: Tensor,
+        ones: Tensor,
+        zeros: Tensor,
+        zero: Tensor,
+        forces_case_1: Tensor,
+        forces_case_2: Tensor,
+        forces_case_3: Tensor,
+        forces_case_5: Tensor,
+        forces_case_6: Tensor,
+        forces_case_7: Tensor,
+        forces_case_9: Tensor,
+        forces_case_10: Tensor,
+        forces_case_11: Tensor,
+        forces_case_12: Tensor,
+
+) -> Tensor:
+    # Filter noise
+    foot_contact_forces[..., 0:3] = torch.where(
+        torch.abs(foot_contact_forces[..., 0:3]) > 0.01,
+        foot_contact_forces[..., 0:3],
+        zero)
+
+    # x sign
+    x = torch.where(
+        torch.abs(foot_contact_forces[..., 0]) > 0.0, ones, zeros)
+    x = torch.where(foot_contact_forces[..., 0] == 0, 2.0 * torch.ones_like(ones), x)
+
+    # y sign
+    y = torch.where(
+        torch.abs(foot_contact_forces[..., 1]) > 0.0, ones,
+        3.0 * torch.ones_like(ones))
+    y = torch.where(foot_contact_forces[..., 1] == 0, 3.0 * torch.ones_like(ones), y)
+
+    # Determining sensors used
+    sensor = torch.where(x == 1.0, zeros, 4.0 * torch.ones_like(ones))  # Is x positive
+    sensor = torch.where(x == 2.0, 8.0 * torch.ones_like(ones), sensor)  # Is x zero
+    case = torch.reshape(torch.add(y, sensor), (-1, 1))
+
+    forces = torch.where(case == 1.0,
+                         forces_case_1,
+                         forces)  # Is sensor +,+
+    forces = torch.where(case == 2.0,
+                         forces_case_2,
+                         forces)  # Is sensor +,-
+    forces = torch.where(case == 3.0,
+                         forces_case_3,
+                         forces)  # Is sensor +,0
+    forces = torch.where(case == 5.0,
+                         forces_case_5,
+                         forces)  # Is sensor -,+
+    forces = torch.where(case == 6.0,
+                         forces_case_6,
+                         forces)  # Is sensor -,-
+    forces = torch.where(case == 7.0,
+                         forces_case_7,
+                         forces)  # Is sensor -,0
+    forces = torch.where(case == 9.0,
+                         forces_case_9,
+                         forces)  # Is sensor 0,+
+    forces = torch.where(case == 10.0,
+                         forces_case_10,
+                         forces)  # Is sensor 0,-
+    forces = torch.where(case == 11.0,
+                         forces_case_11,
+                         forces)  # Is sensor 0,0
+
+    forces = torch.where(torch.reshape(foot_contact_forces[..., 2], (-1, 1)) < 1,
+                         forces_case_12,
+                         forces)  # Is negative force
+
+    return forces
+
+
+# Cleats
+@torch.jit.script
+def compute_feet_sensors_cleats(
+        # tensors
+        left_contact_forces: Tensor,
+        right_contact_forces: Tensor,
+        forces: Tensor,
+        ones: Tensor
+) -> Tensor:
+    # original
+    left_pts = torch.linalg.norm(left_contact_forces.T, dim=0).T  # nx4
+    right_pts = torch.linalg.norm(right_contact_forces.T, dim=0).T  # nx4
+
+    # Barely faster
+    # left_pts = left_contact_forces[..., 2]
+    # right_pts = right_contact_forces[..., 2]
+
+    pts = torch.cat((left_pts, right_pts), 1)  # nx8
+    location = torch.where(pts > 1.0, ones, forces)
+
+    # print("self.left_pts: ", left_pts)
+    # print("self.left_contact_forces: ", left_contact_forces)
+    # print("self.right_pts: ", right_pts)
+    # print("self.right_contact_forces: ", right_contact_forces)
+    # print('feet: ', location)
+
+    return location
+
+
+# todo FIX
 @torch.jit.script
 def compute_bez_reward(
         # tensors
         dof_pos_bez: Tensor,
+        dof_vel_bez: Tensor,
         default_dof_pos: Tensor,
         imu_lin_bez: Tensor,
         imu_ang_bez: Tensor,
         root_pos_bez: Tensor,
         root_orient_bez: Tensor,
+        up_vec: Tensor,
         root_pos_ball: Tensor,
         root_vel_ball: Tensor,
-        goal: Tensor,
-        bez_init: Tensor,
         ball_init: Tensor,
+        ball_init_vel: Tensor,
+        bez_init_xy: Tensor,
         reset_buf: Tensor,
         progress_buf: Tensor,
+        feet: Tensor,
         max_episode_length: int,
+        num_envs: int
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
 
@@ -554,7 +895,7 @@ def compute_bez_reward(
     ball_velocity_forward_reward = torch.sum(distance_unit_vec * root_vel_ball[..., 0:2], dim=-1)
     ball_velocity_norm = torch.reshape(torch.linalg.norm(root_vel_ball[..., 0:2], dim=1), (-1, 1))
 
-    goalline_to_ball = torch.sub(root_pos_ball[..., 0:2], bez_init[..., 0:2])  # nx2
+    goalline_to_ball = torch.sub(root_pos_ball[..., 0:2], bez_init_xy[..., 0:2])  # nx2
     goalline_to_ball_norm = torch.reshape(torch.linalg.norm(goalline_to_ball, dim=1), (-1, 1))
     goalline_unit_vec = torch.div(goalline_to_ball, goalline_to_ball_norm)  # 2xn / nx1 = nx2
 
@@ -568,7 +909,7 @@ def compute_bez_reward(
 
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
-
+    """
     # =====================================
     # Close to the Goal
     # if torch.linalg.norm(root_pos_ball[..., 0:2] - goal) < 0.05:
@@ -610,7 +951,7 @@ def compute_bez_reward(
     reset = torch.where(ball_velocity_norm[..., 0] < 0.05, ones,
                         reset)
 
-
+    """
     # =====================================
     # if progress_buf >= max_episode_length:
     #     print('Horizon Ended')
@@ -625,19 +966,22 @@ def compute_bez_reward(
 
 
 @torch.jit.script
-def compute_bez_observations(dof_pos_bez: Tensor,
-                             dof_vel_bez: Tensor,  # 18
-                             imu: Tensor,  # 6
-                             off_orn: Tensor,  # 2
-                             feet: Tensor,  # 8
-                             ball_init: Tensor  # 2
-                             ) -> Tensor:
-    obs = torch.cat((dof_pos_bez,
+def compute_bez_observations(
+        # tensors
+        dof_pos_bez: Tensor,  # 18
+        dof_vel_bez: Tensor,  # 18
+        imu: Tensor,  # 6
+        feet: Tensor,  # 8
+        ball_init: Tensor,  # 2
+        ball_init_vel: Tensor  # 2
+
+) -> Tensor:
+    obs = torch.cat((dof_pos_bez,  # 18
                      dof_vel_bez,  # 18
                      imu,  # 6
-                     off_orn,  # 2
                      feet,  # 8
-                     ball_init  # 2
+                     ball_init,  # 2
+                     ball_init_vel  # 2
                      ), dim=-1)
 
     return obs

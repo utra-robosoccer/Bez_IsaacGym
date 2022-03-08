@@ -1,5 +1,5 @@
 params:
-  seed: -1
+  seed: ${...seed}
 
   algo:
     name: a2c_continuous
@@ -59,10 +59,9 @@ params:
     grad_norm: 1.0
     entropy_coef: 0.0
     truncate_grads: True
-    ppo: True
     e_clip: 0.2
     horizon_length: 32
-    minibatch_size: 16384 #40 #16384 # has to correlate with # of env in bez.yaml 4 * numEnvs
+    minibatch_size: 40 #40 #16384 # has to correlate with # of env in bez.yaml 4 * numEnvs
     mini_epochs: 8
     critic_coef: 4
     clip_value: True
