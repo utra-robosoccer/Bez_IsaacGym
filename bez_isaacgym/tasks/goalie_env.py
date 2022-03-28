@@ -5,6 +5,7 @@ import sys
 
 from matplotlib import pyplot as plt
 
+from isaacgym.torch_utils import *
 from utils.torch_jit_utils import *
 from .base.vec_task import VecTask
 from isaacgym import gymtorch
@@ -91,7 +92,8 @@ class GoalieEnv(VecTask):
         self.feet_dim = 8
         self.dof_dim = 18  # or 16 if we remove head
         self.rnn_dim = 1
-        self.ball_dim = 2  # ball position
+        self.ball_dim = 4  # ball position
+        self.goal_line_dim = 2
 
         # Limits
         self.imu_max_ang_vel = 8.7266
@@ -114,7 +116,7 @@ class GoalieEnv(VecTask):
 
         # Number of observation and actions
         self.cfg["env"][
-            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.orn_dim + self.feet_dim + self.ball_dim  # 54
+            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.feet_dim + self.goal_line_dim + self.ball_dim # 54
         self.cfg["env"]["numActions"] = self.dof_dim
 
         super().__init__(config=self.cfg, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -155,14 +157,59 @@ class GoalieEnv(VecTask):
         self.rigid_body = gymtorch.wrap_tensor(rigid_body_tensor)
 
         self.bez_init_xy = torch.tensor(self.bez_init_state[0:2], device=self.device)
-        self.ball_init = torch.tensor([self.ball_init_state[0:2]], device=self.device).repeat((self.num_envs, 1))
-        self.ball_init_vel = torch.tensor([self.ball_init_state[7:9]], device=self.device).repeat((self.num_envs, 1))
+        self.ball_init = torch.zeros(self.num_envs, 2, device=self.device)
+        self.ball_init_vel = torch.zeros(self.num_envs, 2, device=self.device)
+
+        # new ball spawning
+        self.ball_angleRange = self.cfg["env"]["ballInitState"]["angleRange"]
+        self.ball_distanceRange = self.cfg["env"]["ballInitState"]["distanceRange"]
+        self.ball_distanceVariance = self.cfg["env"]["ballInitState"]["distanceVariance"]
+        self.ball_ForwardAnglevariance = self.cfg["env"]["ballInitState"]["ForwardAnglevariance"]
+        self.ball_speed = self.cfg["env"]["ballInitState"]["speed"]
+        self.ball_speedVariance = self.cfg["env"]["ballInitState"]["speedVariance"]
+
+        angles = torch.rand(self.num_envs, device=self.device) \
+                 * (self.ball_angleRange * 2) + math.pi / 2 - self.ball_angleRange
+        distance = torch.rand(self.num_envs, device=self.device) \
+                   * (self.ball_distanceVariance * 2) + self.ball_distanceRange - self.ball_distanceVariance
+        forwandAngle = torch.rand(self.num_envs, device=self.device) \
+                       * (self.ball_ForwardAnglevariance * 2) - self.ball_ForwardAnglevariance
+        ball_speed = torch.rand(self.num_envs, device=self.device) \
+                     * (self.ball_speedVariance * 2) + self.ball_speed - self.ball_speedVariance
+
+        self.ball_init[:, 0] = torch.sin(angles) * distance
+        self.ball_init[:, 1] = torch.cos(angles) * distance
+
+        ball_angle_wf = torch.atan2(-self.ball_init[:, 0], -self.ball_init[:, 1]) + forwandAngle
+        self.ball_init_vel[:, 0] = torch.sin(ball_angle_wf) * distance
+        self.ball_init_vel[:, 1] = torch.cos(ball_angle_wf) * distance
+        ball_vel_norm = torch.linalg.norm(self.ball_init_vel, dim=1)
+
+        self.ball_init_vel[:, 0] = torch.div(self.ball_init_vel[:, 0], ball_vel_norm) * ball_speed
+        self.ball_init_vel[:, 1] = torch.div(self.ball_init_vel[:, 1], ball_vel_norm) * ball_speed
+
+
+        """
+        # initial ball randomness to pos and vel
+        self.ball_init = torch.rand(self.num_envs, 2, device=self.device) + torch.tensor([self.ball_init_state[0:2]], device=self.device).repeat((self.num_envs, 1))
+        self.ball_init_vel = torch.rand(self.num_envs, 2, device=self.device) + torch.tensor([self.ball_init_state[7:9]], device=self.device).repeat((self.num_envs, 1))
+        """
 
         self.initial_root_states = self.root_states.clone()
-        self.initial_root_states[:] = to_torch([self.bez_init_state, self.ball_init_state],
-                                               device=self.device, requires_grad=False).repeat((self.num_envs, 1))
-        self.initial_root_states[:, 7:13] = 0
+        initial_root_states_bez = \
+            to_torch([self.bez_init_state], device=self.device, requires_grad=False).repeat((self.num_envs, 1))
+        initial_root_states_ball = \
+            to_torch([self.ball_init_state], device=self.device, requires_grad=False).repeat((self.num_envs, 1))
+        initial_root_states_ball[:, 0:2] = self.ball_init
+        initial_root_states_ball[:, 7:9] = self.ball_init_vel
 
+        self.initial_root_states[:] = \
+            torch.cat([initial_root_states_bez, initial_root_states_ball], dim=-1).view(-1,initial_root_states_bez.shape[-1])
+
+        self.goal_line_position = \
+            torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device, requires_grad=False)
+
+        # root poz bez
         self.dof_pos_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 0]
         self.dof_vel_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 1]
 
@@ -590,8 +637,8 @@ class GoalieEnv(VecTask):
             self.feet,
             self.max_episode_length,
             self.num_envs,
+            self.goal_line_position
         )
-
 
     def compute_observations(self):
         self.gym.refresh_dof_state_tensor(self.sim)
@@ -612,17 +659,66 @@ class GoalieEnv(VecTask):
         else:
             self.feet = self.feet_sensors_no_cleats()
 
+        self.complute_goaline_position()
+        #print(self.goal_line_position)
+
         self.obs_buf[:] = compute_bez_observations(
             # tensors
             self.dof_pos_bez,  # 18
             self.dof_vel_bez,  # 18
             imu,  # 6
             self.feet,  # 8
+            self.goal_line_position,  # 2
             self.ball_init,  # 2
             self.ball_init_vel # 2
         )
 
+    def complute_goaline_position(self):
+        # time to goal line (x/-vx)
+        self.goal_line_position[:, 0] = torch.div(self.ball_init[:, 0], (-1 * self.ball_init_vel[:, 0]))
+        # position at goal line (x/-vx * vy + y)
+        self.goal_line_position[:, 1] = self.goal_line_position[:, 0] * self.ball_init_vel[:, 1] + self.ball_init[:, 1]
+
     def reset_idx(self, env_ids):
+        # update ball randomness
+        angles = torch.rand(self.num_envs, device=self.device) \
+                 * (self.ball_angleRange * 2) + math.pi / 2 - self.ball_angleRange
+        distance = torch.rand(self.num_envs, device=self.device) \
+                   * (self.ball_distanceVariance * 2) + self.ball_distanceRange - self.ball_distanceVariance
+        forwandAngle = torch.rand(self.num_envs, device=self.device) \
+                       * (self.ball_ForwardAnglevariance * 2) - self.ball_ForwardAnglevariance
+        ball_speed = torch.rand(self.num_envs, device=self.device) \
+                     * (self.ball_speedVariance * 2) + self.ball_speed - self.ball_speedVariance
+
+        self.ball_init[:, 0] = torch.sin(angles) * distance
+        self.ball_init[:, 1] = torch.cos(angles) * distance
+
+        ball_angle_wf = torch.atan2(-self.ball_init[:, 0], -self.ball_init[:, 1]) + forwandAngle
+        self.ball_init_vel[:, 0] = torch.sin(ball_angle_wf) * distance
+        self.ball_init_vel[:, 1] = torch.cos(ball_angle_wf) * distance
+        ball_vel_norm = torch.linalg.norm(self.ball_init_vel, dim=1)
+
+        self.ball_init_vel[:, 0] = torch.div(self.ball_init_vel[:, 0], ball_vel_norm) * ball_speed
+        self.ball_init_vel[:, 1] = torch.div(self.ball_init_vel[:, 1], ball_vel_norm) * ball_speed
+        """
+        self.ball_init = torch.rand(self.num_envs, 2, device=self.device) + \
+                         torch.tensor([self.ball_init_state[0:2]], device=self.device).repeat((self.num_envs, 1))
+        self.ball_init_vel = torch.rand(self.num_envs, 2, device=self.device) + torch.tensor(
+            [self.ball_init_state[7:9]], device=self.device).repeat((self.num_envs, 1))
+        """
+
+        self.initial_root_states = self.root_states.clone()
+
+        initial_root_states_bez = \
+            to_torch([self.bez_init_state], device=self.device, requires_grad=False).repeat((self.num_envs, 1))
+        initial_root_states_ball = \
+            to_torch([self.ball_init_state], device=self.device, requires_grad=False).repeat((self.num_envs, 1))
+        initial_root_states_ball[:, 0:2] = self.ball_init
+        initial_root_states_ball[:, 7:9] = self.ball_init_vel
+
+        self.initial_root_states[:] = \
+            torch.cat([initial_root_states_bez, initial_root_states_ball], dim=-1).view(-1, initial_root_states_bez.shape[-1])
+
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
@@ -884,13 +980,17 @@ def compute_bez_reward(
         progress_buf: Tensor,
         feet: Tensor,
         max_episode_length: int,
-        num_envs: int
+        num_envs: int,
+        goal_line_position: Tensor
 
 ) -> Tuple[Tensor, Tensor]:  # (reward, reset, feet_in air, feet_air_time, episode sums)
 
     distance_to_ball = torch.sub(root_pos_ball[..., 0:2], root_pos_bez[..., 0:2])  # nx2
     distance_to_ball_norm = torch.reshape(torch.linalg.norm(distance_to_ball, dim=1), (-1, 1))
     distance_unit_vec = torch.div(distance_to_ball, distance_to_ball_norm)  # 2xn / nx1 = nx2
+
+    distance_to_ball_goalline = torch.abs(torch.sub(goal_line_position[..., 1], root_pos_bez[..., 1]))  # nx1
+
 
     ball_velocity_forward_reward = torch.sum(distance_unit_vec * root_vel_ball[..., 0:2], dim=-1)
     ball_velocity_norm = torch.reshape(torch.linalg.norm(root_vel_ball[..., 0:2], dim=1), (-1, 1))
@@ -900,15 +1000,11 @@ def compute_bez_reward(
     goalline_unit_vec = torch.div(goalline_to_ball, goalline_to_ball_norm)  # 2xn / nx1 = nx2
 
     # reward
-    vel_reward = 0.05 * torch.linalg.norm(imu_ang_bez, dim=1)
-    pos_reward = 0.05 * torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
-
-    vel_pos_reward = torch.sub(vel_reward, pos_reward)
-
-    reward = vel_pos_reward
-
     ones = torch.ones_like(reset_buf)
-    reset = torch.zeros_like(reset_buf)
+    #reward = (ones - torch.flatten(torch.tanh(distance_to_ball_goalline)))) * 0.01
+    reward = torch.zeros_like(reset_buf)
+    # 1-tanh(robot_to_ball)
+
     """
     # =====================================
     # Close to the Goal
@@ -922,6 +1018,23 @@ def compute_bez_reward(
     # reward = torch.where(distance_to_goal_norm < 0.05,
     #                      torch.ones_like(reward) * 100,
     #                      reward)
+    """
+
+    # =====================================
+    # if ball stopped:
+    #     print('Ball Stopped')
+    # =====================================
+
+    reset = torch.where(
+        ball_velocity_norm[..., 0] < 0.1,
+        ones,
+        reset_buf
+    )
+    reward = torch.where(
+        ball_velocity_norm[..., 0] < 0.1,
+        ones - torch.flatten(torch.tanh(distance_to_ball_goalline)),
+        reward
+    )
 
     # =====================================
     # Failed to stop the ball
@@ -932,26 +1045,14 @@ def compute_bez_reward(
     reset = torch.where(
         goalline_to_ball[..., 0] < 0,
         ones,
-        reset)
+        reset
+    )
     reward = torch.where(
         goalline_to_ball[..., 0] < 0,
-        torch.ones_like(reward) * -10000.0,
-        reward)
+        torch.ones_like(reward) * -1.0,
+        reward
+    )
 
-    # =====================================
-    # if ball stopped:
-    #     print('Ball Stopped')
-    # =====================================
-
-    reward = torch.where(
-        ball_velocity_norm[..., 0] < 0.05,
-        torch.ones_like(reward) * goalline_to_ball[..., 0],
-        reward)
-
-    reset = torch.where(ball_velocity_norm[..., 0] < 0.05, ones,
-                        reset)
-
-    """
     # =====================================
     # if progress_buf >= max_episode_length:
     #     print('Horizon Ended')
@@ -959,9 +1060,14 @@ def compute_bez_reward(
 
     # Horizon Ended
     reset = torch.where(progress_buf >= max_episode_length, ones, reset)
-    reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
-                         reward)
+    reward = torch.where(
+        progress_buf >= max_episode_length,
+        (ones - torch.flatten(torch.tanh(distance_to_ball_norm))) * 0.5 \
+            + (ones - torch.flatten(torch.tanh(ball_velocity_norm))) * 0.5,
+        reward
+    )
 
+    # print(reward)
     return reward, reset
 
 
@@ -972,6 +1078,7 @@ def compute_bez_observations(
         dof_vel_bez: Tensor,  # 18
         imu: Tensor,  # 6
         feet: Tensor,  # 8
+        goal_line_position: Tensor,  # 2
         ball_init: Tensor,  # 2
         ball_init_vel: Tensor  # 2
 
@@ -980,6 +1087,7 @@ def compute_bez_observations(
                      dof_vel_bez,  # 18
                      imu,  # 6
                      feet,  # 8
+                     goal_line_position,  # 2
                      ball_init,  # 2
                      ball_init_vel  # 2
                      ), dim=-1)

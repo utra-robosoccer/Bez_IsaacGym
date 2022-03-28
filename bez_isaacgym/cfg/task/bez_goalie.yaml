@@ -4,7 +4,7 @@ physics_engine: ${..physics_engine}
 
 # if given will override the device setting in gym.
 env:
-  numEnvs: ${resolve_default:40,${...num_envs}} # 10 4096
+  numEnvs: ${resolve_default:2048,${...num_envs}} # 10 4096
   envSpacing: 4 # [m]
   episodeLength: 1000
   clipActions: 3.9
@@ -21,10 +21,19 @@ env:
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
 
   ballInitState:
-    pos: [ 2, 0, 0.1 ] # xyz [m]
+    pos: [ 2, -0.5, 0.1 ] # xyz [m]
+    #pos: [ 0, 0, 0.1 ] # xyz [m]
     rot: [ 0.0, 0.0, 0.0, 1.0 ] # xyzw [quat]
-    vLinear: [ -5.0, 0.5, 0.0 ]  # xyz [m/s]
+    vLinear: [ -5.5, -0.5, 0.0 ]  # xyz [m/s]
+    #vLinear: [ 0, 0, 0.0 ]  # xyz [m/s]
     vAngular: [ 0.0, 0.0, 0.0 ]  # xyz [rad/s]
+    angleRange: 0.785398 # rad (45 degree)
+    ForwardAnglevariance: 0.2 #0.441873535
+    distanceRange: 3 # m
+    distanceVariance: 0.5 #m
+    speed: 4 #m/s
+    speedVariance: 0.5 #m/2
+
 
   control:
     # PD Drive parameters:
@@ -100,7 +109,7 @@ env:
     dofVelocityScale: 0.05
 
     # episode length in seconds
-    episodeLength_s: 15
+    episodeLength_s: 2
 
   # viewer cam:
   viewer:

@@ -44,7 +44,7 @@ headless: False
 
 # set default tasks and default training config based on tasks
 defaults:
-  - task: bez_kick
+  - task: bez_goalie
   - train: ${task}PPO
   - hydra/job_logging: disabled
 
