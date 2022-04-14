@@ -93,7 +93,7 @@ class GoalieEnv(VecTask):
         self.dof_dim = 18  # or 16 if we remove head
         self.rnn_dim = 1
         self.ball_dim = 4  # ball position
-        self.goal_line_dim = 1
+        self.goal_line_dim = 2
 
         # Limits
         self.imu_max_ang_vel = 8.7266
@@ -116,7 +116,7 @@ class GoalieEnv(VecTask):
 
         # Number of observation and actions
         self.cfg["env"][
-            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.feet_dim + self.goal_line_dim# 51
+            "numObservations"] = self.dof_dim + self.dof_dim + self.imu_dim + self.feet_dim + self.goal_line_dim + self.ball_dim# 56
         self.cfg["env"]["numActions"] = self.dof_dim
 
         super().__init__(config=self.cfg, sim_device=sim_device, graphics_device_id=graphics_device_id,
@@ -185,7 +185,7 @@ class GoalieEnv(VecTask):
             torch.cat([initial_root_states_bez, initial_root_states_ball], dim=-1).view(-1,initial_root_states_bez.shape[-1])
 
         self.goal_line_position = \
-            torch.zeros(self.num_envs, 1, dtype=torch.float, device=self.device, requires_grad=False)
+            torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device, requires_grad=False)
 
         # root poz bez
         self.dof_pos_bez = self.dof_state.view(self.num_envs, self.num_dof, -1)[..., 0]
@@ -698,15 +698,15 @@ class GoalieEnv(VecTask):
             imu,  # 6
             self.feet,  # 8
             self.goal_line_position,  # 2
-            #self.ball_init,  # 2
-            #self.ball_init_vel # 2
+            self.ball_init,  # 2
+            self.ball_init_vel # 2
         )
 
     def complute_goaline_position(self):
         # time to goal line (x/-vx)
         self.goal_line_position[:, 0] = torch.div(self.ball_init[:, 0], (-1 * self.ball_init_vel[:, 0]))
         # position at goal line (x/-vx * vy + y)
-        self.goal_line_position[:, 0] = self.goal_line_position[:, 0] * self.ball_init_vel[:, 1] + self.ball_init[:, 1]
+        self.goal_line_position[:, 1] = self.goal_line_position[:, 0] * self.ball_init_vel[:, 1] + self.ball_init[:, 1]
 
     def reset_idx(self, env_ids):
         # update ball position
@@ -1086,18 +1086,18 @@ def compute_bez_observations(
         dof_vel_bez: Tensor,  # 18
         imu: Tensor,  # 6
         feet: Tensor,  # 8
-        goal_line_position: Tensor,  # 1
-        #ball_init: Tensor,  # 2
-        #ball_init_vel: Tensor  # 2
+        goal_line_position: Tensor,  # 2
+        ball_init: Tensor,  # 2
+        ball_init_vel: Tensor  # 2
 
 ) -> Tensor:
     obs = torch.cat((dof_pos_bez,  # 18
                      dof_vel_bez,  # 18
                      imu,  # 6
                      feet,  # 8
-                     goal_line_position,  # 1
-                     #ball_init,  # 2
-                     #ball_init_vel  # 2
+                     goal_line_position,  # 2
+                     ball_init,  # 2
+                     ball_init_vel  # 2
                      ), dim=-1)
 
     return obs

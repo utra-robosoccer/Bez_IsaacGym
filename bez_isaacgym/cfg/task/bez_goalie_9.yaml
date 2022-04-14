@@ -1,5 +1,5 @@
 # used to create the object
-name: bez_goalie
+name: bez_goalie_9
 physics_engine: ${..physics_engine}
 
 # if given will override the device setting in gym.
@@ -33,7 +33,7 @@ env:
     distanceVariance: 0.5 #m
     speed: 4 #m/s
     speedVariance: 0.5 #m/2
-    pos_deviation: [ 0, 0.5, 0.1 ]  #m
+    pos_deviation: [ 0, 0, 0.1 ]  #m
     left_ratio: 0.5 # positive y, left of robot
 
 
