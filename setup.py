@@ -15,10 +15,12 @@ root_dir = os.path.dirname(os.path.realpath(__file__))
 INSTALL_REQUIRES = [
     # RL
     "gym",
-    "torch==1.9.0+cu111",
+    "torch",
     "omegaconf",
+    "termcolor",
     "hydra-core>=1.1",
-    "rl-games==1.1.3",
+    # "rl-games==1.1.3", # TODO upgrade to 1.5.2
+    "pyvirtualdisplay",
 ]
 
 # Installation operation

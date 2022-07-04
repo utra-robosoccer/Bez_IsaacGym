@@ -93,7 +93,7 @@ class Trajectory:
 
 class SoccerTrajectoryClass:
     def __init__(self, env, env_ids):
-        self.trajectory_path = "//resources/library/trajectories/trajectories"
+        self.trajectory_path = os.path.join(os.path.dirname(__file__), "../trajectories")
         self.simulation = True
         self.trajectory_complete = True
         self.env = env
