@@ -35,6 +35,7 @@ To install `Bez_IsaacGym` package and all its dependencies, run:
 ```bash
 git clone git@github.com:utra-robosoccer/Bez_IsaacGym.git
 cd PATH_TO/Bez_IsaacGym
+pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 pip install -e .
 ```
 
@@ -67,7 +68,7 @@ defaults to the task name, but can also be overridden via the `experiment` argum
 To load a trained checkpoint and continue training, use the `checkpoint` argument:
 
 ```bash
-python train.py task=bez_kick checkpoint=runs/Bez_Kick/nn/Bez_Kick.pth
+python train.py task=bez_kick checkpoint=result/Bez_Kick/nn/Bez_Kick.pth
 ```
 
 To load a trained checkpoint and only perform inference (no training), pass `test=True` 
