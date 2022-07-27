@@ -3,38 +3,16 @@ import time
 import math
 
 from utils.torch_jit_utils import *
-from .base.vec_task import VecTask
+from vec_task import VecTask
 from isaacgym import gymtorch
 from isaacgym import gymapi
 
 import torch
 from torch._tensor import Tensor
-from typing import Tuple, Dict
-import enum
+from typing import Tuple
 
 
-class Joints(enum.IntEnum):
-    HEAD_1 = 0
-    HEAD_2 = 1
-    LEFT_ARM_1 = 2
-    LEFT_ARM_2 = 3
-    LEFT_LEG_1 = 4
-    LEFT_LEG_2 = 5
-    LEFT_LEG_3 = 6
-    LEFT_LEG_4 = 7
-    LEFT_LEG_5 = 8
-    LEFT_LEG_6 = 9
-    RIGHT_ARM_1 = 10
-    RIGHT_ARM_2 = 11
-    RIGHT_LEG_1 = 12
-    RIGHT_LEG_2 = 13
-    RIGHT_LEG_3 = 14
-    RIGHT_LEG_4 = 15
-    RIGHT_LEG_5 = 16
-    RIGHT_LEG_6 = 17
-
-
-class WalkEnv(VecTask):
+class BezEnv(VecTask):
 
     def __init__(self, cfg, sim_device, graphics_device_id, headless):
         # Setup
@@ -55,9 +33,6 @@ class WalkEnv(VecTask):
         v_lin = self.cfg["env"]["bezInitState"]["vLinear"]
         v_ang = self.cfg["env"]["bezInitState"]["vAngular"]
         self.bez_init_state = pos + rot + v_lin + v_ang
-
-        # goal state
-        goal = self.cfg["env"]["goalState"]["goal"]
 
         # model choice
         self.cleats = self.cfg["env"]["asset"]["cleats"]
@@ -837,236 +812,6 @@ def compute_feet_sensors_cleats(
     # print('feet: ', location)
 
     return location
-
-
-@torch.jit.script
-def compute_bez_reward(
-        # tensors
-        dof_pos_bez: Tensor,
-        default_dof_pos: Tensor,
-        imu_lin_bez: Tensor,
-        imu_ang_bez: Tensor,
-        root_pos_bez: Tensor,
-        root_orient_bez: Tensor,
-        up_vec: Tensor,
-        goal: Tensor,
-        reset_buf: Tensor,
-        progress_buf: Tensor,
-        feet: Tensor,
-        bez_init_state: Tensor,
-        # left_contact_forces: Tensor,
-        # right_contact_forces: Tensor,
-        max_episode_length: int,
-        num_envs: int,
-        dt: float,
-        debug_rewards: bool
-
-) -> Tuple[Tensor, Tensor]:  # (reward, reset)
-    # Calculate Velocity direction field
-    distance_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])  # nx2
-    distance_to_goal_norm = torch.reshape(torch.linalg.norm(distance_to_goal, dim=1), (-1, 1))
-    distance_unit_vec = torch.div(distance_to_goal, distance_to_goal_norm)
-    velocity_forward_reward = torch.sum(torch.mul(distance_unit_vec, imu_lin_bez[..., 0:2]), dim=-1)
-
-    up_vec = get_basis_vector(root_orient_bez[..., 0:4], up_vec).view(num_envs, 3)
-    up_proj = up_vec[:, 2]
-
-    DESIRED_HEIGHT = 0.325  # Height of ready position
-
-    # reward
-
-    # old
-    vel_bez = torch.cat((imu_lin_bez, imu_ang_bez), dim=1)
-    vel_reward = torch.linalg.norm(vel_bez, dim=1)
-    # new
-    vel_lin_reward = torch.linalg.norm(imu_lin_bez, dim=1)
-    vel_ang_reward = torch.linalg.norm(imu_ang_bez, dim=1)
-    # vel_reward = torch.add(vel_lin_reward, vel_ang_reward)
-
-    pos_reward = torch.linalg.norm(default_dof_pos - dof_pos_bez, dim=1)
-    distance_to_height = torch.abs(DESIRED_HEIGHT - up_proj)
-    distance_to_height_scaled = torch.mul(distance_to_height, 1)
-
-    # Feet reward
-    ground_feet = torch.sum(feet, dim=1)
-    ground_feet_scaled = torch.mul(ground_feet, 0.01)
-    ground_feet_scaled = torch.sub(ground_feet_scaled, 0.08)
-
-    legacy = False
-    if legacy:
-        # Legacy
-        # 0.05 * (51 - pos_reward) + 0.25 * (10 - (vel_reward)) - distance_to_height
-        vel_reward_scaled = torch.sub(10.0, vel_reward)
-        vel_reward_scaled = torch.mul(vel_reward_scaled, 0.25)
-        pos_reward_scaled = torch.sub(51.0, pos_reward)
-        pos_reward_scaled = torch.mul(pos_reward_scaled, 0.05)
-        vel_pos_reward = torch.add(vel_reward_scaled, pos_reward_scaled)
-        height_vel_pos_reward = torch.sub(vel_pos_reward, distance_to_height)
-        # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
-        # height_pos_reward = torch.add(distance_to_height, pos_reward)
-        # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
-
-        # 0.1 * (0.1 * velocity_forward_reward - distance_to_height)
-        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 0.1)
-        vel_height_reward = torch.sub(velocity_forward_reward_scaled, distance_to_height)
-        vel_height_reward_scaled = torch.mul(vel_height_reward, 0.1)
-    else:
-        # Variant Walking
-        #  - ((distance_to_height + ((.05 * vel_ang_reward + 0.05 * vel_lin_reward) + 0.05 * pos_reward)) - 0.01 * ground_feet)
-        #  height_vel_pos_reward = - distance_to_height - 0.05 * vel_ang_reward - 0.05 * vel_lin_reward - 0.05 * pos_reward
-        #  height_vel_pos_ang_reward = - distance_to_height  - 0.05 * vel_ang_reward - 0.05 * pos_reward - 0.01 * ground_feet
-        scale = 0.05
-        vel_reward_scaled = torch.mul(vel_reward, scale)
-        vel_ang_reward_scaled = torch.mul(vel_ang_reward, scale)
-        pos_reward_scaled = torch.mul(pos_reward, scale)
-        vel_pos_reward = torch.add(vel_reward_scaled, pos_reward_scaled)
-        vel_ang_pos_reward = torch.add(vel_ang_reward_scaled, pos_reward_scaled)
-        height_vel_pos_reward = -torch.add(vel_pos_reward, distance_to_height)
-        # height_vel_pos_ang_reward = -torch.add(vel_ang_pos_reward, distance_to_height)
-        # height_vel_pos_reward = torch.sub(height_vel_pos_reward, ground_feet_scaled)
-        # height_pos_reward = torch.add(distance_to_height, pos_reward)
-        # height_pos_reward_scaled = torch.mul(height_pos_reward, 1)
-
-        # 0.1 velocity_forward_reward - distance_to_height - 0.05 * pos_reward
-        velocity_forward_reward_scaled = torch.mul(velocity_forward_reward, 10)
-        height_pos_reward = torch.add(distance_to_height,5* pos_reward_scaled)
-        vel_height_reward = torch.sub(velocity_forward_reward_scaled, height_pos_reward)
-        vel_height_reward_scaled = torch.mul(vel_height_reward, 1)
-
-    # print("vel_ang_reward: ",float(vel_ang_reward[0]))
-    # print("vel_lin_reward: ",float(vel_lin_reward[0]))
-    # print("pos_reward: ", float(pos_reward[0]))
-    # print("distance_to_height: ", float(distance_to_height[0]))
-    # print("height_vel_pos_reward: ", float(height_vel_pos_reward[0]))
-    # print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
-    # print("feet: ", feet)
-
-    distance_to_goal_norm = torch.reshape(distance_to_goal_norm, (-1))
-    reward = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
-                         height_vel_pos_reward,
-                         vel_height_reward_scaled
-                         )
-
-    # Reset
-    ones = torch.ones_like(reset_buf)
-    termination_scale = -1.0
-
-    # Fall
-    # state = torch.where(distance_kicked_norm > 0.75, ones,
-    #                     torch.zeros_like(reward))
-    #
-    # reset_dist = torch.where(root_pos_bez[..., 2] < 0.275, ones, reset_buf)
-    # reward_dist = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * termination_scale, reward)
-    # reset_proj = torch.where(up_proj < 0.7, ones, reset_buf)
-    # reward_proj = torch.where(up_proj < 0.7, torch.ones_like(reward) * termination_scale, reward)
-    #
-    # reset = torch.where(
-    #     state == 1.0,
-    #     reset_proj,
-    #     reset_dist)
-    # reward = torch.where(
-    #     state == 1.0,
-    #     reward_proj,
-    #     reward_dist)
-
-    reset = torch.where(root_pos_bez[..., 2] < 0.275, ones, reset_buf)
-    reward = torch.where(root_pos_bez[..., 2] < 0.275, torch.ones_like(reward) * termination_scale, reward)
-    # pitch_angle = torch.abs(normalize_angle(pitch))
-    # reset = torch.where(pitch_angle > 1, ones, reset_buf)
-    # reward = torch.where(pitch_angle > 1, torch.ones_like(reward) * termination_scale, reward)
-    # reset = torch.where(up_proj < 0.7, ones, reset_buf)
-    # reward = torch.where(up_proj < 0.7, torch.ones_like(reward) * termination_scale, reward)
-
-    state = torch.where(distance_to_goal_norm < 0.05,  # Close to the Goal
-                        ones,
-                        torch.zeros_like(reward)
-                        )
-    state = torch.where(pos_reward < 0.15,  # Close to the default position
-                        state + torch.ones_like(reward),
-                        state
-                        )
-    state = torch.where(vel_ang_reward < 0.1,  # Close to no angular velocity
-                        state + torch.ones_like(reward),
-                        state
-                        )
-    state = torch.where(vel_lin_reward < 0.1,  # Close to no linear velocity
-                        state + torch.ones_like(reward),
-                        state
-                        )
-    reset = torch.where(state == 4.0,  # Win state
-                        ones,
-                        reset
-                        )
-    reward = torch.where(state == 4.0,
-                         torch.ones_like(reward) * (1000.0 - 1000.0 * (progress_buf / max_episode_length)),
-                         reward)
-
-
-    bez_init_state[..., 0] = 0
-    bez_init_state[..., 1] = 0.0
-    bez_init_to_goal = torch.sub(goal, bez_init_state)  # nx2
-    bez_init_to_goal_norm = torch.reshape(torch.linalg.norm(bez_init_to_goal, dim=1), (-1, 1))
-    bez_init_to_goal_unit_vec = torch.div(bez_init_to_goal, bez_init_to_goal_norm)  # 2xn / nx1 = nx2
-
-    bez_to_goal = torch.sub(goal, root_pos_bez[..., 0:2])  # nx2
-    bez_to_goal_norm = torch.reshape(torch.linalg.norm(bez_to_goal, dim=1), (-1, 1))
-    bez_to_goal_unit_vec = torch.div(bez_to_goal, bez_to_goal_norm)  # 2xn / nx1 = nx2
-
-    bez_to_goal_angle = torch.atan2(bez_to_goal_unit_vec[..., 1], bez_to_goal_unit_vec[..., 0])
-    bez_init_to_goal_angle = torch.atan2(bez_init_to_goal_unit_vec[..., 1], bez_init_to_goal_unit_vec[..., 0])
-    goal_angle_diff = torch.abs((bez_init_to_goal_angle - bez_to_goal_angle))
-    goal_angle_diff = torch.reshape(goal_angle_diff, (-1))
-
-    # Out of Bound
-    # print(float(goal_angle_diff[0]), float(distance_to_goal_norm[0]))
-    reset = torch.where(
-        goal_angle_diff > 1.5708,
-        ones,
-        reset)
-    reward = torch.where(
-        goal_angle_diff > 1.5708,
-        torch.ones_like(reward) * -100.0,
-        reward)
-
-    # Horizon Ended
-    reset = torch.where(progress_buf >= max_episode_length, ones, reset)
-
-    reward = torch.where(progress_buf >= max_episode_length, torch.zeros_like(reward),
-                         reward)
-
-    if debug_rewards:
-        distance_to_goal_x = torch.reshape(distance_to_goal[..., 0:1], (-1)).float()
-        distance_to_goal_y = torch.reshape(distance_to_goal[..., 1:2], (-1)).float()
-
-        distance_traveled = torch.sub(root_pos_bez[..., 0:2], bez_init_state)  # nx2
-        distance_traveled_norm = torch.reshape(torch.linalg.norm(distance_traveled, dim=1), (-1, 1))
-        average_velocity_norm = torch.reshape(torch.linalg.norm(imu_lin_bez[..., 0:2], dim=1), (-1, 1))
-
-        print("up_vec: ", float(up_proj[0]))
-
-        print("distance_to_goal_x: ", float(distance_to_goal_x[0]))
-        print("distance_to_goal_y: ", float(distance_to_goal_y[0]))
-        print("distance_to_goal_norm: ", float(distance_to_goal_norm[0]))
-        print("distance_traveled: ", float(distance_traveled_norm[0]), " Time elapsed: ", float((progress_buf)[0] * dt))
-        print("average_velocity: ", float(distance_traveled_norm[0]) / float((progress_buf)[0] * dt))
-        print("current_velocity: ", float(average_velocity_norm[0]))
-
-        # print("ball_vel_height_reward: ", float(ball_vel_height_reward[0]))
-        # print("ball_velocity_forward_reward_scaled: ", float(ball_velocity_forward_reward_scaled_after[0]))
-        print("velocity_forward_reward_scaled: ", float(velocity_forward_reward_scaled[0]))
-        print("vel_reward_scaled: ", float(vel_reward_scaled[0]))
-        print("pos_reward_scaled: ", float(pos_reward_scaled[0]))
-        # print("dof_vel_reward_scaled: ", float(dof_vel_reward_scaled[0]))
-        print("distance_to_height_scaled: ", float(distance_to_height_scaled[0]))
-        # print("goal_angle_diff_scaled: ", float(goal_angle_diff_scaled[0]))
-        print("ground_feet_scaled: ", float(ground_feet_scaled[0]))
-
-        print("feet: ", feet.float())
-        print("reword: ", float(reward[0]))
-
-    # reset = torch.ones_like(reset_buf)
-
-    return reward, reset
 
 
 @torch.jit.script

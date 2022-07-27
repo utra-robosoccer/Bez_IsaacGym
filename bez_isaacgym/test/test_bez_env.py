@@ -6,8 +6,8 @@ from resources.library.pycontrol.src.soccer_pycontrol import soccerbot_controlle
 from resources.library.trajectories.src.soccer_trajectories import SoccerTrajectoryClass
 from play import LaunchModel
 
-from bez_isaacgym.utils.utils import parse_sim_params
-from bez_isaacgym.tasks.kick_env import KickEnv
+from utils.utils import parse_sim_params
+from tasks import KickEnv
 # python
 import torch
 import os
@@ -16,12 +16,16 @@ import unittest
 import sys
 from random import randint
 
+from tasks import WalkEnv
+
 
 class TestBezEnv(unittest.TestCase):
-    """Test the Utra gym environment."""
+    """Test the Bez gym environment."""
 
     def setUp(self) -> None:
+        pass
 
+    def setUpKick(self):
         with open(os.path.join(os.getcwd(), 'cfg/task/bez_kick_test.yaml'), 'r') as f:
             cfg = yaml.load(f, Loader=yaml.SafeLoader)
         # load parameters
@@ -71,12 +75,62 @@ class TestBezEnv(unittest.TestCase):
         self.sim_length = 30000
         self.reset_length = 30000
 
+    def setUpWalk(self):
+        with open(os.path.join(os.getcwd(), 'cfg/task/bez_walk_test.yaml'), 'r') as f:
+            cfg = yaml.load(f, Loader=yaml.SafeLoader)
+        # load parameters
+        with open(os.path.join(os.getcwd(), 'cfg/train/bez_walkPPO.yaml'), 'r') as f:
+            cfg_train = yaml.load(f, Loader=yaml.SafeLoader)
+        # remove file name from system arguments
+        sys.argv.pop()
+
+        # parse arguments
+        custom_parameters = [
+            # sets verbosity of the run
+            {"name": "--verbose", "action": "store_true", "default": False,
+             "help": "Set verbosity of the environment (useful for debugging)."},
+            # sets whether to train/test
+            {"name": "--test", "action": "store_true", "default": False,
+             "help": "Run trained policy, no training"},
+            # sets whether to train further or test with provided NN weights
+            {"name": "--resume", "type": int, "default": 0,
+             "help": "Resume training or start testing from a checkpoint"},
+            # sets whether to run GUI for visualization or not.
+            {"name": "--headless", "action": "store_true", "default": False,
+             "help": "Force display off at all times"},
+            # sets the tasks type: that is implementation language
+            {"name": "--task_type", "type": str, "default": "Python",
+             "help": "Choose Python or C++"},
+            # sets the device for the environment
+            {"name": "--device", "type": str, "default": "GPU",
+             "help": "Choose CPU or GPU device for running physics"},
+            # sets the device for the RL agent
+            {"name": "--ppo_device", "type": str, "default": "GPU",
+             "help": "Choose CPU or GPU device for inferencing PPO network"}
+        ]
+
+        args = gymutil.parse_arguments(
+            description="RL Policy",
+            custom_parameters=custom_parameters
+        )
+
+        # Getting sim params
+        sim_params = parse_sim_params(args, cfg, cfg_train)
+
+        # create environment
+        self.env = WalkEnv(cfg=cfg, sim_device=args.sim_device,
+                           graphics_device_id=args.graphics_device_id, headless=args.headless)
+
+        # Testing parameter
+        self.sim_length = 30000
+        self.reset_length = 30000
+
     """
     Reset environment tests
     """
 
     def test_default_reset(self):
-
+        self.setUpKick()
         # check reset
         for step_num in range(self.sim_length):
 
@@ -94,7 +148,7 @@ class TestBezEnv(unittest.TestCase):
     """
 
     def test_zero_action_agent(self):
-
+        self.setUpKick()
         # check reset
         for step_num in range(self.sim_length):
 
@@ -117,7 +171,7 @@ class TestBezEnv(unittest.TestCase):
     """
 
     def test_random_action_agent(self):
-
+        self.setUpKick()
         # check reset
         for step_num in range(1, self.sim_length):
 
@@ -140,6 +194,7 @@ class TestBezEnv(unittest.TestCase):
     """
 
     def test_motor_action_agent(self):
+        self.setUpKick()
         # joint animation states
         ANIM_SEEK_LOWER = 1
         ANIM_SEEK_UPPER = 2
@@ -189,8 +244,8 @@ class TestBezEnv(unittest.TestCase):
     Walk environment test
     """
 
-    def test_walk_agent(self):
-
+    def test_walk_engine_agent(self):
+        self.setUpKick()
         self.walker = soccerbot_controller.SoccerbotController(self.env, 0)
         self.walker.ready()
         self.walker.wait(100)
@@ -207,7 +262,8 @@ class TestBezEnv(unittest.TestCase):
     Trajectory environment test
     """
 
-    def test_trajectory_agent(self):
+    def test_key_animation_agent(self):
+        self.setUpKick()
         trajectory_class = SoccerTrajectoryClass(self.env, 0)
         self.walker = soccerbot_controller.SoccerbotController(self.env, 0)
         # self.walker.ready()
@@ -222,11 +278,22 @@ class TestBezEnv(unittest.TestCase):
             self.env.render()
 
     """
-    Model environment test
+    Kick Policy environment test
     """
 
-    def test_model_agent(self):
-        obj = LaunchModel(env=self.env)
+    def test_kick_policy_agent(self):
+        self.setUpKick()
+        obj = LaunchModel(env=self.env,checkpoint="results/Bez_Kick/Normal/Bez_Kick_33.pth")
+        obj.load_config()
+        obj.run_model()
+
+    """
+    Walk Policy environment test
+    """
+
+    def test_walk_policy_agent(self):
+        self.setUpWalk()
+        obj = LaunchModel(env=self.env,checkpoint="results/Bez_Walk/Normal/Bez_Walk_33.pth")
         obj.load_config()
         obj.run_model()
 

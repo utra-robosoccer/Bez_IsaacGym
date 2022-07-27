@@ -1,11 +1,10 @@
 # used to create the object
 name: bez_kick
-
 physics_engine: ${..physics_engine}
 
 # if given will override the device setting in gym.
 env:
-  numEnvs: ${resolve_default:4096,${...num_envs}} # 10 4096
+  numEnvs: ${resolve_default:4096,${...num_envs}}
   envSpacing: 4 # [m]
   episodeLength: 1000
   clipActions: 3.9

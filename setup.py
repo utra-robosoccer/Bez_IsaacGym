@@ -19,8 +19,9 @@ INSTALL_REQUIRES = [
     "omegaconf",
     "termcolor",
     "hydra-core>=1.1",
-    # "rl-games==1.1.3", # TODO upgrade to 1.5.2
+    "rl-games==1.1.3", # TODO upgrade to 1.5.2
     "pyvirtualdisplay",
+    "matplotlib",
 ]
 
 # Installation operation
